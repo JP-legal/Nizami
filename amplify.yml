@@ -1,0 +1,21 @@
+version: 1
+applications:
+  - appRoot: nizami-frontend-main
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable
+            - pnpm --version
+            - pnpm install --frozen-lockfile
+        build:
+          commands:
+            - pnpm build
+      artifacts:
+        baseDirectory: dist/nizami-frontend
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - .pnpm-store/**/*
