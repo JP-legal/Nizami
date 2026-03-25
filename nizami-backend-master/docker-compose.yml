@@ -1,0 +1,124 @@
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    container_name: db
+    init: true
+    environment:
+      POSTGRES_DB: nizami_db
+      POSTGRES_USER: nizami_user
+      POSTGRES_PASSWORD: nizami_password
+      PGPASSWORD: nizami_password
+    ports:
+      - '54331:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nizami_user -d nizami_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nizami-network
+
+  web:
+    build: .
+    platform: linux/amd64
+    container_name: web
+    hostname: web
+    init: true
+    command: [ "sh", "-c", "python manage.py init_localstack_s3 || true; for i in 1 2 3 4 5 6 7 8 9 10; do python manage.py migrate && break; echo \"DB not ready, retry $$i/10...\"; sleep 3; [ $$i -eq 10 ] && exit 1; done && exec python manage.py runserver 0.0.0.0:8000" ]
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=nizami_db
+      - DB_USERNAME=nizami_user
+      - DB_PASSWORD=nizami_password
+      - DB_PORT=5432
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_STORAGE_BUCKET_NAME=nizami-local-media
+      - AWS_S3_REGION_NAME=us-east-1
+      - AWS_S3_ENDPOINT_URL=http://localstack:4566
+      - USE_LOCALSTACK_S3=1
+    volumes:
+      - .:/app
+      - ./packages:/app/packages
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - nizami-network
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: nizami-localstack
+    hostname: localstack
+    environment:
+      - SERVICES=s3
+      - EDGE_PORT=4566
+      - AWS_DEFAULT_REGION=us-east-1
+      # Allow presigned URLs and backend GetObject in local dev (avoids 403 on signature/ACL quirks)
+      - S3_SKIP_SIGNATURE_VALIDATION=1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+    networks:
+      - nizami-network
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - nizami-network
+
+  admin-panel:
+    build:
+      context: ../nizami-admin-panel-master
+      args:
+        CONFIGURATION: development
+    container_name: admin-panel
+    hostname: admin-panel
+    init: true
+    ports:
+      - "4200:80"
+    depends_on:
+      - web
+    networks:
+      - nizami-network
+
+  frontend:
+    build:
+      context: ../nizami-frontend-main
+      dockerfile: Dockerfile
+      args:
+        CONFIGURATION: development
+    image: nizami-frontend:${BUILD_VERSION:-latest}
+    container_name: frontend
+    hostname: frontend
+    init: true
+    ports:
+      - "4201:80"
+    depends_on:
+      - web
+    networks:
+      - nizami-network
+
+networks:
+  nizami-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  localstack_data:

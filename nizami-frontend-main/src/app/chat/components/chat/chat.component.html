@@ -1,0 +1,87 @@
+<app-mobile-chat-side-bar
+  #mobileSideBar
+  class="flex xl:hidden h-0  fixed inset-0 items-center justify-center z-[3000]"
+  [ngClass]="{
+    'h-screen': sidebarService.isOpen(),
+  }"
+  (onViewChat)="viewChat($event)"
+  (onDeleteChat)="deleteChat($event)"
+  (onNewChat)="newChatClicked()"
+></app-mobile-chat-side-bar>
+
+<div
+  class="flex flex-col h-full bg-gradient-to-b from-green201 to-grey201 bg-cover bg-center "
+  [ngStyle]="isNewChat ? {
+  'background-image': 'url(/assets/images/chat-bg.png)',
+  } : {}"
+>
+  <div class="flex flex-row gap-2 h-full">
+    <app-chat-side-bar
+      #sideBar
+      class="h-full hidden xl:block"
+      (onViewChat)="viewChat($event)"
+      (onDeleteChat)="deleteChat($event)"
+    ></app-chat-side-bar>
+
+    <div class="flex flex-col flex-1">
+      <app-chat-header
+        (onNewChatClicked)="newChatClicked()"
+        (onLegalAssistanceClicked)="requestLegalAssistance()"
+        [messagesCount]="messages().length"
+        [showLegalAssistanceButton]="messages().length >= 3 && chat() !== null"
+      ></app-chat-header>
+
+      <app-chat-messages
+        #chatMessages
+        class="h-full flex-1 overflow-y-auto"
+        [chat]="chat()!"
+        [error]="error()"
+        [loadingError]="loadingError()"
+        [messages]="messages()"
+        [isGeneratingResponse]="isGeneratingResponse()"
+        [submittingMessageLanguage]="$any(submittingMessage()?.language ?? 'ar')"
+        [isLoadingMessages]="isLoadingMessages()"
+        (onRetry)="onNewMessage(this.submittingMessage()!)"
+        (onRetryLoading)="loadMessages()"
+        (onReachedTop)="onScroll()"
+
+        [disabled]="isDisabled()"
+        (onNewMessage)="onNewMessage($event)"
+        [isNewChat]="isNewChat"
+      ></app-chat-messages>
+
+      <app-chat-input
+        #chatInput
+        class="mb-5 z-[1000] transition-all duration-300 ease-in-out"
+        [ngClass]="{
+          'block xl:hidden': isNewChat,
+          'xl:px-40': sidebarService.isOpen(),
+          'xl:pl-80': !sidebarService.isOpen(),
+          }"
+        [style.opacity]="showLegalAssistanceConsent() ? '0.5' : '1'"
+        [style.filter]="showLegalAssistanceConsent() ? 'blur(4px)' : 'none'"
+        [disabled]="isDisabled() || showLegalAssistanceConsent()"
+        (onNewMessage)="onNewMessage($event)"
+      ></app-chat-input>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Credit Error Popup -->
+<app-credit-error-popup
+  [isVisible]="showCreditErrorPopup()"
+  [errorMessage]="creditErrorMessage()"
+  (onClose)="closeCreditErrorPopup()"
+  (onGoToPlans)="goToPlansFromPopup()"
+></app-credit-error-popup>
+
+<!-- Legal Assistance Consent Dialog -->
+@if (showLegalAssistanceConsent()) {
+  <app-legal-assistance-consent-dialog
+    [chatTitle]="chat()?.title || ''"
+    (confirmed)="onLegalAssistanceConsentConfirmed()"
+    (onClose)="onLegalAssistanceConsentClosed()"
+  ></app-legal-assistance-consent-dialog>
+}

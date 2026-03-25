@@ -1,0 +1,166 @@
+import { Component, OnInit, Optional, output } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { Router } from '@angular/router';
+import { DialogRef } from '@angular/cdk/dialog';
+import { SubscriptionService } from '../../services/subscription.service';
+import { UserSubscription } from '../../models/subscription.model';
+import { SpinnerComponent } from '../../../common/components/spinner/spinner.component';
+import { ButtonComponent } from '../../../common/components/button/button.component';
+import { OutlineButtonComponent } from '../../../common/components/outline-button/outline-button.component';
+
+@Component({
+  selector: 'app-current-plan-tab',
+  standalone: true,
+  imports: [
+    CommonModule,
+    TranslatePipe,
+    DatePipe,
+    SpinnerComponent,
+    ButtonComponent,
+    OutlineButtonComponent
+  ],
+  templateUrl: './current-plan-tab.component.html',
+  styleUrls: ['./current-plan-tab.component.scss']
+})
+export class CurrentPlanTabComponent implements OnInit {
+  onCancel = output();
+  onUpgrade = output();
+  subscription: UserSubscription | null = null;
+  loading = true;
+  error: string | null = null;
+  cancelling = false;
+  showCancelConfirmation = false;
+
+  constructor(
+    private subscriptionService: SubscriptionService,
+    private router: Router,
+    private translateService: TranslateService,
+    @Optional() private dialogRef: DialogRef<any>
+  ) {}
+
+  ngOnInit(): void {
+    this.loadActiveSubscription();
+  }
+
+  loadActiveSubscription(): void {
+    this.loading = true;
+    this.error = null;
+
+    // Get the latest subscription (active, cancelled, or expired)
+    this.subscriptionService.getLatestSubscription().subscribe({
+      next: (subscription: UserSubscription) => {
+        this.subscription = subscription;
+        this.loading = false;
+      },
+      error: () => {
+        this.error = 'failed_to_load_subscription';
+        this.loading = false;
+      }
+    });
+  }
+
+  formatPrice(priceCents: number, currency: string): string {
+    if (isNaN(priceCents)) return `0.00 ${currency}`;
+    return `${(priceCents / 100).toFixed(2)} ${currency}`;
+  }
+
+  getIntervalText(intervalUnit: string | null, intervalCount: number | null): string {
+    if (!intervalUnit || !intervalCount) return '';
+    
+    const unitKey = intervalCount > 1 
+      ? `billing_interval.${intervalUnit.toLowerCase()}s`
+      : `billing_interval.${intervalUnit.toLowerCase()}`;
+    
+    const translatedUnit = this.translateService.instant(unitKey);
+    const prefix = this.translateService.instant('interval_prefix') || '/';
+    
+    return intervalCount > 1 
+      ? `${prefix} ${intervalCount} ${translatedUnit}`
+      : `${prefix} ${translatedUnit}`;
+  }
+
+  getCreditTypeText(creditType: string | null): string {
+    if (!creditType) return '';
+    // Always use plural form for credit type
+    const key = `credit_type.messages`;
+    return this.translateService.instant(key);
+  }
+
+  isExpired(expiryDate: string): boolean {
+    return new Date(expiryDate) < new Date();
+  }
+
+  getDaysRemaining(expiryDate: string): number {
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const diff = expiry.getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
+
+  canCancelSubscription(): boolean {
+    if (!this.subscription) return false;
+    return this.subscription.is_active && !this.isExpired(this.subscription.expiry_date);
+  }
+
+  isExpiredOrInactive(): boolean {
+    if (!this.subscription) return false;
+    return !this.subscription.is_active || this.isExpired(this.subscription.expiry_date);
+  }
+
+  isFreePlan(): boolean {
+    if (!this.subscription?.plan) return false;
+    return this.subscription.plan.tier === 'BASIC';
+  }
+
+  renewSubscription(): void {
+    if (!this.subscription?.plan?.uuid) return;
+    
+    // Close dialog if exists
+    if (this.dialogRef) {
+      this.dialogRef.close();
+    }
+    
+    // Navigate to payment page with the same plan
+    this.router.navigate(['/payment', this.subscription.plan.uuid]);
+  }
+
+  upgradeSubscription(): void {
+    // Emit event to parent to switch to plans tab
+    this.onUpgrade.emit();
+  }
+
+  openCancelConfirmation(): void {
+    this.showCancelConfirmation = true;
+  }
+
+  closeCancelConfirmation(): void {
+    this.showCancelConfirmation = false;
+  }
+
+  confirmCancelSubscription(): void {
+    this.cancelling = true;
+    this.error = null;
+
+    this.subscriptionService.cancelSubscription().subscribe({
+      next: (_response) => {
+        this.cancelling = false;
+        this.showCancelConfirmation = false;
+        // Reload subscription to get updated status
+        this.loadActiveSubscription();
+      },
+      error: (err) => {
+        this.cancelling = false;
+        this.showCancelConfirmation = false;
+        if (err.error?.error === 'subscription_already_expired') {
+          this.error = 'This subscription has already expired';
+        } else if (err.error?.error === 'no_active_user_subscription') {
+          this.error = 'No active subscription found';
+        } else {
+          this.error = `Failed to cancel subscription: ${err?.error?.message || err?.message || 'Unknown error'}`;
+        }
+      }
+    });
+  }
+}
+

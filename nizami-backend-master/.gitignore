@@ -1,0 +1,12 @@
+.venv
+packages
+.idea
+/.env
+/media
+.prod.env
+deploy-local.py
+**/__pycache__
+**/*.pyc
+*.pyc
+__pycache__/
+*.py[cod]
