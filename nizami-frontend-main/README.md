@@ -65,3 +65,4 @@ For more information on using the Angular CLI, including detailed command refere
 npm run i18n:extract
 ```
 then fill files in assets/i18n/{LOCALE}.json
+# Nizami-FE
