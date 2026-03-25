@@ -14,7 +14,7 @@ applications:
           commands:
             - pnpm build
       artifacts:
-        baseDirectory: dist/nizami-frontend
+        baseDirectory: dist/nizami-frontend/browser
         files:
           - '**/*'
       cache:
