@@ -6,7 +6,9 @@ applications:
         preBuild:
           commands:
             - corepack enable
+            - corepack prepare pnpm@10.33.0 --activate
             - pnpm --version
+            - pnpm config set store-dir .pnpm-store
             - pnpm install --frozen-lockfile
         build:
           commands:

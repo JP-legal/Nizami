@@ -1,6 +1,7 @@
 {
   "name": "nizami-frontend",
   "version": "0.0.0",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
