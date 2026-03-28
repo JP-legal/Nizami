@@ -3,6 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from src.chats.flow import build_graph
+from src.chats.export_views import ExportChatView, ShareExportApiView
 from src.chats.views import CreateChatViewSet, ListChatsViewSet, ListMessagesViewSet, CreateMessageViewSet, \
     RetrieveChatViewSet, CreateMessageFileViewSet, DownloadFileViewSet, DeleteChatViewSet, UpdateChatViewSet
 
@@ -31,4 +32,8 @@ urlpatterns = [
     path('messages/upload-file', CreateMessageFileViewSet.as_view({'post': 'create'})),
 
     path('file-messages/<int:pk>/get-file', DownloadFileViewSet.as_view({'get': 'retrieve'})),
+
+    # Export & sharing
+    path('export', ExportChatView.as_view(), name='chat-export'),
+    path('exports/<uuid:pk>', ShareExportApiView.as_view(), name='chat-export-detail'),
 ]

@@ -41,7 +41,6 @@ urlpatterns = [
     path('api/v1/admin/subscriptions/', include('src.subscription.admin_urls')),
     #User Requests
     path('api/v1/user-requests/', include('src.user_requests.urls')),
-    
 ]
 
 if settings.DEBUG:

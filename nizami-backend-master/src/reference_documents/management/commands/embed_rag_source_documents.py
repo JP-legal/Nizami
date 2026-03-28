@@ -3,7 +3,7 @@ import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import boto3
 from django.conf import settings
@@ -154,7 +154,7 @@ class Command(BaseCommand):
         failed_total = 0
 
         def worker(doc_id: int) -> bool:
-            print(f"worker for doc_id {doc_id}")
+            logger.info("Starting worker for doc_id=%s", doc_id)
             close_old_connections()
             try:
                 doc = RagSourceDocument.objects.get(id=doc_id)
@@ -164,13 +164,10 @@ class Command(BaseCommand):
                     chunk_overlap=CHUNK_OVERLAP,
                 )
                 self._process_document(doc, s3_client, bucket, text_splitter, batch_size)
-                print(f"execution done for doc_id {doc_id}")
-
+                logger.info("Finished embedding doc_id=%s", doc_id)
                 return True
             except Exception as exc:
                 logger.error("Failed to embed doc id=%s: %s", doc_id, exc)
-                print(f"execution failed for doc_id {doc_id}")
-
                 return False
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -209,6 +206,9 @@ class Command(BaseCommand):
         if not isinstance(clean_text, str) or not clean_text.strip():
             raise ValueError("missing or empty clean_text")
 
+        # ---- Extract and persist metadata columns ----
+        _apply_metadata(doc, payload)
+
         # ---- Delete old chunks if force-re-embedding ----
         RagSourceDocumentChunk.objects.filter(rag_source_document=doc).delete()
 
@@ -237,17 +237,75 @@ class Command(BaseCommand):
         ]
         RagSourceDocumentChunk.objects.bulk_create(chunk_objects, batch_size=100)
 
-        # ---- Generate description & embed it (same as ReferenceDocument) ----
+        # ---- Generate description & embed it ----
+        # Prepend structured metadata so the description embedding encodes
+        # document identity (type, entity, date) not just content.
         if not doc.description:
-            doc.description = generate_description_for_text(clean_text, "ar")
+            description_input = _build_description_input(payload, clean_text)
+            doc.description = generate_description_for_text(description_input, "ar")
 
         doc.description_embedding = embeddings.embed_query(doc.description)
         doc.is_embedded = True
         doc.save(update_fields=[
-            "description", "description_embedding", "is_embedded", "updated_at",
+            "description", "description_embedding", "is_embedded",
+            "doc_type", "entity", "date_gregorian", "date_hijri",
+            "decision_number", "decision_date_hijri", "source",
+            "incomplete_flag", "is_duplicate", "format_confidence",
+            "updated_at",
         ])
 
         logger.info(
             "Embedded doc id=%s  chunks=%s  title=%r",
             doc.id, len(chunk_objects), doc.title,
         )
+
+
+def _apply_metadata(doc: "RagSourceDocument", payload: Dict[str, Any]) -> None:
+    """Write structured metadata fields from the S3 JSON payload onto the model instance."""
+    meta: Dict[str, Any] = payload.get("metadata") or {}
+
+    doc.doc_type = meta.get("doc_type") or None
+    doc.entity = meta.get("entity") or None
+    doc.date_hijri = meta.get("date_hijri_dual") or None
+    doc.decision_number = meta.get("decision_number") or None
+    doc.decision_date_hijri = meta.get("decision_date_hijri") or None
+    doc.source = payload.get("source") or None
+    doc.incomplete_flag = bool(meta.get("incomplete_flag", False))
+    doc.is_duplicate = bool(meta.get("is_duplicate_filename", False))
+
+    raw_confidence = (meta.get("format_detection") or {}).get("confidence")
+    doc.format_confidence = float(raw_confidence) if raw_confidence is not None else None
+
+    raw_date = meta.get("date_gregorian")
+    if raw_date:
+        try:
+            doc.date_gregorian = date.fromisoformat(raw_date)
+        except (ValueError, TypeError):
+            doc.date_gregorian = None
+    else:
+        doc.date_gregorian = None
+
+
+def _build_description_input(payload: Dict[str, Any], clean_text: str) -> str:
+    """
+    Prepend a structured metadata header to clean_text so the LLM-generated
+    description — and its embedding — encodes document identity (type, entity,
+    date, decision number) alongside content semantics.
+    """
+    meta: Dict[str, Any] = payload.get("metadata") or {}
+
+    parts = []
+    if meta.get("doc_type"):
+        parts.append(f"نوع الوثيقة: {meta['doc_type']}")
+    if meta.get("entity"):
+        parts.append(f"الجهة: {meta['entity']}")
+    if meta.get("date_gregorian"):
+        parts.append(f"التاريخ: {meta['date_gregorian']}")
+    if meta.get("decision_number"):
+        parts.append(f"رقم القرار: {meta['decision_number']}")
+
+    if not parts:
+        return clean_text
+
+    header = " | ".join(parts)
+    return f"[{header}]\n{clean_text}"

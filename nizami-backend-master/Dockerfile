@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
 
 # Copy the rest of the application
 COPY . /app

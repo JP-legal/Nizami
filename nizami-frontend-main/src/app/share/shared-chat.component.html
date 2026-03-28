@@ -1,0 +1,68 @@
+<!-- Loading -->
+@if (loading) {
+  <div class="flex items-center justify-center min-h-screen bg-green201">
+    <div class="flex flex-col items-center gap-4">
+      <svg class="animate-spin w-10 h-10 text-blue1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <p class="text-grey6 text-sm font-medium">Loading shared chat…</p>
+    </div>
+  </div>
+}
+
+<!-- Expired -->
+@if (expired) {
+  <div class="flex items-center justify-center min-h-screen bg-green201">
+    <div class="bg-white rounded-2xl shadow p-10 max-w-sm w-full text-center">
+      <img src="/assets/icons/exclamation.svg" alt="Expired" class="w-10 h-10 mx-auto mb-4">
+      <h2 class="text-lg font-bold text-grey12 mb-2">Link Expired</h2>
+      <p class="text-grey5 text-sm">This shared chat link is no longer active.</p>
+    </div>
+  </div>
+}
+
+<!-- Error -->
+@if (error) {
+  <div class="flex items-center justify-center min-h-screen bg-green201">
+    <div class="bg-white rounded-2xl shadow p-10 max-w-sm w-full text-center">
+      <img src="/assets/icons/sad.svg" alt="Error" class="w-10 h-10 mx-auto mb-4">
+      <h2 class="text-lg font-bold text-grey12 mb-2">Chat Not Found</h2>
+      <p class="text-grey5 text-sm">This share link is invalid or has been removed.</p>
+    </div>
+  </div>
+}
+
+<!-- Main content -->
+@if (export && !loading) {
+  <div class="flex flex-col h-screen bg-gradient-to-b from-green201 to-grey201">
+
+    <!-- Header -->
+    <div class="flex flex-row items-center justify-between px-4 py-4 xl:px-7 bg-white border-b border-grey1">
+      <img src="/assets/icons/logo.svg" alt="Nizami" class="h-8">
+
+      <div class="flex items-center gap-2 text-grey5 text-sm">
+        <img src="/assets/icons/lock.svg" alt="Read only" class="w-4 h-4">
+        <span>Read only</span>
+      </div>
+
+      @if (export.pdf_url) {
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-blue1 hover:bg-purple5 text-white text-sm font-bold rounded-lg"
+          (click)="downloadPdf()"
+        >
+          <img src="/assets/icons/document-green.svg" alt="PDF" class="w-4 h-4 brightness-0 invert">
+          Download PDF
+        </button>
+      }
+    </div>
+
+    <!-- Messages -->
+    <div class="flex-1 overflow-y-auto py-6 px-6 xl:px-40 flex flex-col gap-8">
+      @for (message of messages; track message.id; let isLast = $last) {
+        <app-message [message]="message" [isLast]="isLast"></app-message>
+      }
+    </div>
+
+  </div>
+}

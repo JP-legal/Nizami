@@ -239,5 +239,12 @@
 	"legal_assistance_consent_title": "طلب مساعدة من فريق قانوني",
 	"legal_assistance_consent_message": "أنت تطلب المساعدة من فريق قانوني. سيتم إرسال ملخص الدردشة \"{{title}}\" كسياق للفريق. سيتواصل الفريق القانوني معك عبر البريد الإلكتروني أو الهاتف لبدء الإجراءات ومعرفة كيفية البدء بالخطوات التالية.",
 	"yes": "نعم",
-	"no": "لا"
+	"no": "لا",
+	"export_chat": "تصدير الدردشة",
+	"export_chat_exporting": "جاري التصدير...",
+	"export_chat_success_title": "التصدير جاهز",
+	"export_chat_success_message": "تم تصدير دردشتك بنجاح. قم بتنزيل ملف PDF أو شارك الرابط.",
+	"export_download_pdf": "تنزيل PDF",
+	"export_copy_share_link": "نسخ رابط المشاركة",
+	"export_link_copied": "تم نسخ الرابط!"
 }

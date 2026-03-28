@@ -1,0 +1,196 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: "Git SHA to deploy (leave empty to build from current HEAD)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPO: ${{ vars.ECR_BACKEND_REPO }}
+  IMAGE_TAG: ""   # set at runtime by the "Set image tag" step
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER_PROD }}
+  ECS_WEB_SERVICE: ${{ vars.ECS_WEB_SERVICE || 'nizami-web-service' }}
+  ECS_WEB_TASK_FAMILY: ${{ vars.ECS_WEB_TASK_FAMILY || 'nizami-web' }}
+  ECS_WEB_CONTAINER: ${{ vars.ECS_WEB_CONTAINER || 'web' }}
+  # One-off migration task networking (private subnet + web security group)
+  ECS_SUBNET_ID: ${{ vars.ECS_SUBNET_ID_PROD }}
+  ECS_SECURITY_GROUP: ${{ vars.ECS_WEB_SG_PROD }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Image tag ────────────────────────────────────────────────────────────
+      - name: Set image tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_sha }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_sha }}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          fi
+
+      # ── AWS auth (OIDC — no long-lived keys) ─────────────────────────────────
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Build & push backend image ───────────────────────────────────────────
+      - name: Login to ECR
+        run: |
+          set -euo pipefail
+          REGISTRY="$(echo "$ECR_REPO" | cut -d/ -f1)"
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build backend image
+        run: |
+          set -euo pipefail
+          docker build \
+            --platform linux/amd64 \
+            -t "$ECR_REPO:$IMAGE_TAG" \
+            -f nizami-backend-master/Dockerfile \
+            nizami-backend-master
+
+      - name: Push backend image
+        run: |
+          set -euo pipefail
+          docker push "$ECR_REPO:$IMAGE_TAG"
+
+      # ── Render task definitions (substitute placeholders) ────────────────────
+      - name: Render task definition files
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          TD_DIR="nizami-backend-master/deployments/task-definitions"
+          for file in "$TD_DIR"/*.json; do
+            sed -i \
+              -e "s|\${ACCOUNT_ID}|$ACCOUNT_ID|g" \
+              -e "s|\${AWS_REGION}|$AWS_REGION|g" \
+              -e "s|\${ECR_REPO}|$ECR_REPO|g" \
+              -e "s|\${IMAGE_TAG}|$IMAGE_TAG|g" \
+              "$file"
+          done
+
+      # ── Run database migrations (one-off ECS task) ────────────────────────────
+      - name: Run database migrations
+        run: |
+          set -euo pipefail
+
+          NEW_TASK_DEF=$(cat nizami-backend-master/deployments/task-definitions/nizami-migrate.json)
+
+          MIGRATE_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Registered migrate task: $MIGRATE_TASK_ARN"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$MIGRATE_TASK_ARN" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNET_ID],securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task started: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE. Check CloudWatch: /ecs/nizami/web"
+            exit 1
+          fi
+
+          echo "Migrations completed successfully."
+
+      # ── Update web service ───────────────────────────────────────────────────
+      - name: Update web task definition
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: nizami-backend-master/deployments/task-definitions/nizami-web.json
+          container-name: ${{ env.ECS_WEB_CONTAINER }}
+          image: ${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+
+      - name: Deploy web service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          service: ${{ env.ECS_WEB_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # ── Update Django Q worker service ───────────────────────────────────────
+      - name: Update djangoq task definition
+        id: render-djangoq
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: nizami-backend-master/deployments/task-definitions/nizami-djangoq.json
+          container-name: djangoq
+          image: ${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+
+      - name: Deploy djangoq service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-djangoq.outputs.task-definition }}
+          service: ${{ vars.ECS_DJANGOQ_SERVICE || 'nizami-djangoq-service' }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # ── Rollback web on failure ───────────────────────────────────────────────
+      - name: Rollback web service on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          echo "Deployment failed — rolling back web service to previous task definition..."
+          PREV_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_WEB_SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          # ECS keeps the previous revision — decrement by 1
+          FAMILY=$(echo "$PREV_TASK_DEF" | sed 's/:[0-9]*$//')
+          PREV_REVISION=$(aws ecs list-task-definitions \
+            --family-prefix "$ECS_WEB_TASK_FAMILY" \
+            --sort DESC \
+            --query 'taskDefinitionArns[1]' \
+            --output text)
+          if [ "$PREV_REVISION" != "None" ] && [ -n "$PREV_REVISION" ]; then
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$ECS_WEB_SERVICE" \
+              --task-definition "$PREV_REVISION"
+            echo "Rolled back to: $PREV_REVISION"
+          else
+            echo "No previous revision found — manual intervention required."
+          fi

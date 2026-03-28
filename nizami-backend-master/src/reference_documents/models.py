@@ -86,6 +86,18 @@ class RagSourceDocument(models.Model):
     s3_bucket = models.CharField(max_length=255, null=True, blank=True)
     s3_key = models.CharField(max_length=1024, null=True, blank=True)
 
+    # Structured metadata extracted from the S3 JSON payload
+    doc_type = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    entity = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    date_gregorian = models.DateField(null=True, blank=True, db_index=True)
+    date_hijri = models.CharField(max_length=30, null=True, blank=True)
+    decision_number = models.CharField(max_length=150, null=True, blank=True, db_index=True)
+    decision_date_hijri = models.CharField(max_length=50, null=True, blank=True)
+    source = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    incomplete_flag = models.BooleanField(default=False, db_index=True)
+    is_duplicate = models.BooleanField(default=False, db_index=True)
+    format_confidence = models.FloatField(null=True, blank=True)
+
     description = models.TextField(blank=True, null=True)
     description_embedding = VectorField(null=True, dimensions=1536)
 

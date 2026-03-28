@@ -239,5 +239,12 @@
   "legal_assistance_consent_title": "Request Help from Legal Team",
   "legal_assistance_consent_message": "You are requesting help from a legal team. A summary of chat \"{{title}}\" will be sent for context for the team. The legal team will contact you via either email or phone to start the procedure and see how to start the next steps.",
   "yes": "Yes",
-  "no": "No"
+  "no": "No",
+  "export_chat": "Export Chat",
+  "export_chat_exporting": "Exporting...",
+  "export_chat_success_title": "Export Ready",
+  "export_chat_success_message": "Your chat has been exported successfully. Download the PDF or share the link.",
+  "export_download_pdf": "Download PDF",
+  "export_copy_share_link": "Copy Share Link",
+  "export_link_copied": "Link Copied!"
 }

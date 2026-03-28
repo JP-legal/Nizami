@@ -320,4 +320,26 @@ export class MessagesService {
       },
     );
   }
+
+  exportChat(chatId: number, messages: { role: string; content: string; timestamp?: string }[]) {
+    return this.http.post<{ pdf_url: string; share_url: string; export_id: string }>(
+      environment.apiUrl + '/v1/chats/export',
+      {
+        chat_id: chatId,
+        chat: messages,
+        summary: {
+          overview: '',
+          problem: '',
+          root_cause: '',
+          solution: '',
+          next_steps: [],
+        },
+      },
+      {
+        headers: {
+          'Authorization': 'Bearer ' + this.auth.getToken()!,
+        },
+      },
+    );
+  }
 }

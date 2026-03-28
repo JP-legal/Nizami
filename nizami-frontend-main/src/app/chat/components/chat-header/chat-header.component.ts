@@ -21,9 +21,12 @@ import {TranslatePipe} from '@ngx-translate/core';
 export class ChatHeaderComponent {
   onNewChatClicked = output();
   onLegalAssistanceClicked = output();
-  
+  onExportClicked = output();
+
   messagesCount = input<number>(0);
   showLegalAssistanceButton = input<boolean>(false);
+  showExportButton = input<boolean>(false);
+  isExporting = input<boolean>(false);
 
   constructor(public sidebar: ChatSideBarService) {
   }
@@ -34,5 +37,9 @@ export class ChatHeaderComponent {
 
   legalAssistanceClicked() {
     this.onLegalAssistanceClicked.emit();
+  }
+
+  exportClicked() {
+    this.onExportClicked.emit();
   }
 }

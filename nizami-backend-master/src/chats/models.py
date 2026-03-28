@@ -4,6 +4,7 @@ import uuid
 from django.db import models
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 from src.prompts.enums import PendingDocIntentStatus, PendingDocIntentIntentType
 from src.users.models import User
@@ -138,6 +139,47 @@ class MessageStepLog(models.Model):
         import ast
 
         return ast.literal_eval(self.output)
+
+
+class ChatExport(models.Model):
+    """
+    Stores a generated PDF export and its public share link.
+    The `chat` FK is optional — exports can be created from raw JSON
+    without being tied to a persisted Chat row.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    chat = models.ForeignKey(
+        Chat,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exports',
+    )
+    owner = models.ForeignKey(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='chat_exports',
+        null=True,
+        blank=True,
+    )
+    chat_json = models.JSONField(help_text='[{role, content, timestamp}]')
+    summary_json = models.JSONField(help_text='{overview, problem, root_cause, solution, next_steps}')
+    pdf_s3_key = models.CharField(max_length=512, null=True, blank=True)
+    pdf_url = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'chats_chat_export'
+        indexes = [
+            models.Index(fields=['owner', 'created_at']),
+        ]
+
+    @property
+    def is_expired(self) -> bool:
+        if self.expires_at is None:
+            return False
+        return timezone.now() > self.expires_at
 
 
 @receiver(pre_save, sender=MessageFile)

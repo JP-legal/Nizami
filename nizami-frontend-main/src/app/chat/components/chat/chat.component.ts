@@ -22,6 +22,7 @@ import {CreditErrorPopupComponent} from '../../../common/components/credit-error
 import {ToastrService} from 'ngx-toastr';
 import {HttpErrorResponse} from '@angular/common/http';
 import {LegalAssistanceConsentDialogComponent} from '../legal-assistance-consent-dialog/legal-assistance-consent-dialog.component';
+import {ExportChatDialogComponent} from '../export-chat-dialog/export-chat-dialog.component';
 
 
 @UntilDestroy()
@@ -37,6 +38,7 @@ import {LegalAssistanceConsentDialogComponent} from '../legal-assistance-consent
     NgStyle,
     CreditErrorPopupComponent,
     LegalAssistanceConsentDialogComponent,
+    ExportChatDialogComponent,
   ],
   providers: [
     MessagesService,
@@ -68,6 +70,9 @@ export class ChatComponent {
   showCreditErrorPopup = signal<boolean>(false);
   creditErrorMessage = signal<string>('');
   showLegalAssistanceConsent = signal<boolean>(false);
+
+  isExporting = signal<boolean>(false);
+  exportResult = signal<{ pdfUrl: string; shareUrl: string } | null>(null);
 
   stop$ = new Subject<void>();
 
@@ -227,6 +232,47 @@ export class ChatComponent {
 
   onLegalAssistanceConsentClosed() {
     this.showLegalAssistanceConsent.set(false);
+  }
+
+  exportChat() {
+    const currentChat = this.chat();
+    if (!currentChat || !currentChat.id || this.isExporting()) {
+      return;
+    }
+
+    const exportMessages = this.messages()
+      .filter(m => m.role === 'user' || m.role === 'system')
+      .map(m => ({
+        role: m.role === 'system' ? 'assistant' : 'user',
+        content: m.text,
+        timestamp: m.create_at ?? undefined,
+      }));
+
+    this.isExporting.set(true);
+
+    this.messagesService
+      .exportChat(currentChat.id, exportMessages)
+      .pipe(
+        untilDestroyed(this),
+        catchError((err: HttpErrorResponse) => {
+          const extracted = extractErrorFromResponse(err);
+          const msg = typeof extracted === 'string' && extracted.trim().length > 0
+            ? extracted
+            : this.translate.instant(marker('errors.something_went_wrong'));
+          this.toastr.error(msg, '', { timeOut: 5000 });
+          this.isExporting.set(false);
+          return EMPTY;
+        }),
+      )
+      .subscribe(result => {
+        this.isExporting.set(false);
+        const shareUrl = `${window.location.origin}/share/${result.export_id}`;
+        this.exportResult.set({ pdfUrl: result.pdf_url, shareUrl });
+      });
+  }
+
+  closeExportDialog() {
+    this.exportResult.set(null);
   }
 
   private sendLegalAssistanceRequest() {

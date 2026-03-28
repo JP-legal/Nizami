@@ -27,8 +27,11 @@
       <app-chat-header
         (onNewChatClicked)="newChatClicked()"
         (onLegalAssistanceClicked)="requestLegalAssistance()"
+        (onExportClicked)="exportChat()"
         [messagesCount]="messages().length"
         [showLegalAssistanceButton]="messages().length >= 3 && chat() !== null"
+        [showExportButton]="messages().length >= 1 && chat() !== null"
+        [isExporting]="isExporting()"
       ></app-chat-header>
 
       <app-chat-messages
@@ -84,4 +87,13 @@
     (confirmed)="onLegalAssistanceConsentConfirmed()"
     (onClose)="onLegalAssistanceConsentClosed()"
   ></app-legal-assistance-consent-dialog>
+}
+
+<!-- Export Chat Result Dialog -->
+@if (exportResult()) {
+  <app-export-chat-dialog
+    [pdfUrl]="exportResult()!.pdfUrl"
+    [shareUrl]="exportResult()!.shareUrl"
+    (onClose)="closeExportDialog()"
+  ></app-export-chat-dialog>
 }

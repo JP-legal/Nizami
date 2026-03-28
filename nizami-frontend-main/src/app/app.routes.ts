@@ -12,6 +12,7 @@ import {
 import {PaymentComponent} from './payment/components/payment/payment.component';
 import {PaymentSuccessComponent} from './payment/components/payment-success/payment-success.component';
 import {PaymentCallbackComponent} from './payment/components/payment-callback/payment-callback.component';
+import {SharedChatComponent} from './share/shared-chat.component';
 
 export const routes: Routes = [
   {
@@ -62,6 +63,11 @@ export const routes: Routes = [
     path: 'payment/:planId',
     component: PaymentComponent,
     canActivate: [AuthenticatedGuard],
+  },
+  // Public share page — no auth required
+  {
+    path: 'share/:exportId',
+    component: SharedChatComponent,
   },
   {
     path: '**',
