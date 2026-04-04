@@ -1,9 +1,9 @@
 <app-mobile-chat-side-bar
   #mobileSideBar
-  class="flex xl:hidden h-0 fixed inset-0 items-center justify-center z-[3000]"
+  class="flex xl:hidden fixed inset-0 items-center justify-center"
   [ngClass]="{
-    'h-screen': sidebarService.isOpen(),
-    'pointer-events-none': !sidebarService.isOpen(),
+    'h-screen z-[3000]': sidebarService.isOpen(),
+    'h-0 z-0': !sidebarService.isOpen(),
   }"
   (onViewChat)="viewChat($event)"
   (onDeleteChat)="deleteChat($event)"

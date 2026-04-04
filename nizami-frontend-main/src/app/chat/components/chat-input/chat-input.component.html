@@ -79,7 +79,8 @@ bg-white border-2 border-grey1 rounded-xl p-1 mx-6 xl:mx-auto"
             [ariaPressed]="speechToText.isListening()"
             (onClick)="toggleDictation()"
           >
-            <ng-icon name="heroMicrophone" size="20"></ng-icon>
+            <!-- pointer-events-none: SVG/icon must not steal taps on iOS/WebKit -->
+            <ng-icon name="heroMicrophone" size="20" class="pointer-events-none shrink-0"></ng-icon>
           </app-icon-button>
         </div>
 
