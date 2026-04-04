@@ -45,6 +45,7 @@
 	"contact_admin_for_support": "فضلاً تواصل مع الإدارة للحصول على الدعم",
 	"got_it": "حسناً",
 	"send_message": "أرسل رسالة",
+	"voice_input.chat_busy": "الإدخال الصوتي غير متاح أثناء تحميل المحادثة أو إرسال رسالة. حاول مرة أخرى بعد قليل.",
 	"voice_input.listening_banner": "الإدخال الصوتي مفعّل — تحدث الآن. اضغط على الميكروفون مرة أخرى للإيقاف.",
 	"voice_input.start_dictation": "بدء الإدخال الصوتي",
 	"voice_input.stop_dictation": "إيقاف الإدخال الصوتي",

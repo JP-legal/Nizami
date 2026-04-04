@@ -54,6 +54,12 @@ export class ChatInputComponent implements OnInit, OnDestroy {
   /** Last recognition-only segment applied; removed from the end of the field before each new update when it still matches. */
   private speechLastLiveSession = '';
 
+  /** Native mic button styles (avoids nested disabled / touch quirks from wrapper components). */
+  readonly micButtonIdleClass =
+    'bg-white text-black border-2 border-grey1 hover:bg-grey2';
+  readonly micButtonActiveClass =
+    'bg-blue1 text-white border-2 border-blue1 hover:bg-blue-500 focus:outline-none';
+
   constructor(
     private isTypingService: IsTypingService,
     private chatInputService: ChatInputService,
@@ -120,6 +126,11 @@ export class ChatInputComponent implements OnInit, OnDestroy {
 
   toggleDictation() {
     if (this.micDisabled) {
+      this.toastr.warning(
+        this.translate.instant(marker('voice_input.chat_busy')),
+        '',
+        { timeOut: 4000 },
+      );
       return;
     }
     if (!this.speechToText.isSupported()) {

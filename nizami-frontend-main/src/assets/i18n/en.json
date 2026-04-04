@@ -45,6 +45,7 @@
 	"contact_admin_for_support": "",
 	"got_it": "",
 	"send_message": "",
+	"voice_input.chat_busy": "Voice input is unavailable while the chat is loading or sending a message. Try again in a moment.",
 	"voice_input.listening_banner": "Voice input is on — speak now. Tap the microphone again to stop.",
 	"voice_input.start_dictation": "Start voice input",
 	"voice_input.stop_dictation": "Stop voice input",

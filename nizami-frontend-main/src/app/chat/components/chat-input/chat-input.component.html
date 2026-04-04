@@ -71,17 +71,18 @@ bg-white border-2 border-grey1 rounded-xl p-1 mx-6 xl:mx-auto"
           [class.ring-offset-2]="speechToText.isListening()"
           [class.ring-offset-white]="speechToText.isListening()"
         >
-          <app-icon-button
-            [type]="speechToText.isListening() ? 'primary' : 'default'"
-            buttonType="button"
-            [disabled]="micDisabled"
-            [ariaLabel]="(speechToText.isListening() ? 'voice_input.stop_dictation' : 'voice_input.start_dictation') | translate"
-            [ariaPressed]="speechToText.isListening()"
-            (onClick)="toggleDictation()"
+          <button
+            type="button"
+            class="p-2 rounded-lg justify-center flex items-center hover:bg-grey-500 min-h-11 min-w-11 w-11 h-11 touch-manipulation cursor-pointer"
+            [ngClass]="speechToText.isListening() ? micButtonActiveClass : micButtonIdleClass"
+            [class.opacity-60]="micDisabled"
+            [attr.aria-label]="(speechToText.isListening() ? 'voice_input.stop_dictation' : 'voice_input.start_dictation') | translate"
+            [attr.aria-pressed]="speechToText.isListening()"
+            [attr.aria-disabled]="micDisabled"
+            (click)="toggleDictation()"
           >
-            <!-- pointer-events-none: SVG/icon must not steal taps on iOS/WebKit -->
             <ng-icon name="heroMicrophone" size="20" class="pointer-events-none shrink-0"></ng-icon>
-          </app-icon-button>
+          </button>
         </div>
 
         <app-icon-button

@@ -1,14 +1,11 @@
-<app-mobile-chat-side-bar
-  #mobileSideBar
-  class="flex xl:hidden fixed inset-0 items-center justify-center"
-  [ngClass]="{
-    'h-screen z-[3000]': sidebarService.isOpen(),
-    'h-0 z-0': !sidebarService.isOpen(),
-  }"
-  (onViewChat)="viewChat($event)"
-  (onDeleteChat)="deleteChat($event)"
-  (onNewChat)="newChatClicked()"
-></app-mobile-chat-side-bar>
+@if (sidebarService.isOpen()) {
+  <app-mobile-chat-side-bar
+    class="flex xl:hidden fixed inset-0 items-center justify-center h-screen z-[3000]"
+    (onViewChat)="viewChat($event)"
+    (onDeleteChat)="deleteChat($event)"
+    (onNewChat)="newChatClicked()"
+  ></app-mobile-chat-side-bar>
+}
 
 <div
   class="flex flex-col h-full bg-gradient-to-b from-green201 to-grey201 bg-cover bg-center "

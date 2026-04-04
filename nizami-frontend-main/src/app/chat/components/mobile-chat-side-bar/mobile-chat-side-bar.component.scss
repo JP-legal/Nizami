@@ -1,6 +1,0 @@
-/* pointer-events:none on a parent does NOT block descendants (they stay auto).
-   inert fixes that in modern browsers; this covers older WebKit if needed. */
-:host ::ng-deep .mobile-sidebar-overlay--pass-through,
-:host ::ng-deep .mobile-sidebar-overlay--pass-through * {
-  pointer-events: none !important;
-}
