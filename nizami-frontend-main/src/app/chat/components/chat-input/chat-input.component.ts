@@ -109,11 +109,12 @@ export class ChatInputComponent implements OnInit, OnDestroy {
   }
 
   get micDisabled(): boolean {
+    // Do not gate the mic on isTyping(): if ngx-typed-writer never fires completeLoop
+    // (e.g. HTML edge cases in production), isTyping can stay true and the mic stays dead.
     return (
       this.disabled() ||
       this.form.disabled ||
-      this.uploadingFilesCount > 0 ||
-      this.isTyping()
+      this.uploadingFilesCount > 0
     );
   }
 

@@ -33,6 +33,10 @@ export class SpeechToTextService {
     if (typeof window === 'undefined') {
       return false;
     }
+    // Chromium only exposes / allows speech recognition in a secure context (HTTPS or localhost).
+    if (typeof globalThis.isSecureContext === 'boolean' && !globalThis.isSecureContext) {
+      return false;
+    }
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   }
 

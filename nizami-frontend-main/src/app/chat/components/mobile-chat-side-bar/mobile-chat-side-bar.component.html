@@ -2,6 +2,7 @@
 fixed inset-0  items-start z-50
 flex flex-col h-full
 "
+     [class.pointer-events-none]="!sidebar.isOpen()"
      [@slideInOut]="sidebar.isOpen() ? 'open' : 'closed'"
      (@slideInOut.done)="onAnimationDone($event)"
      (click)="sidebar.close()"
