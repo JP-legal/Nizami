@@ -1,9 +1,12 @@
 import json
 import logging
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
+
+from hijri_converter import Hijri
 
 import boto3
 from django.conf import settings
@@ -260,9 +263,47 @@ class Command(BaseCommand):
         )
 
 
+_AR_NUMBERS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+
+_AR_HIJRI_MONTHS = {
+    "محرم": 1, "صفر": 2, "ربيع الاول": 3, "ربيع الثاني": 4,
+    "جمادي الاول": 5, "جمادي الثانية": 6, "رجب": 7, "شعبان": 8,
+    "رمضان": 9, "شوال": 10, "ذو القعدة": 11, "ذو الحجة": 12,
+}
+
+
+def _parse_arabic_hijri(text: str) -> Optional[str]:
+    """Parse an Arabic hijri date string like '٣٠ جمادي الاول ١٤٤٤' → 'day/month/year'."""
+    try:
+        text = re.sub(r"\s+", " ", text.translate(_AR_NUMBERS).strip())
+        match = re.match(r"(\d+)\s+(.+)\s+(\d+)", text)
+        if not match:
+            return None
+        day, month_name, year = match.groups()
+        month = _AR_HIJRI_MONTHS.get(month_name.strip())
+        if not month:
+            return None
+        return f"{day}/{month}/{year}"
+    except Exception:
+        return None
+
+
+def _hijri_str_to_gregorian(hijri_str: str) -> Optional[date]:
+    """Convert 'day/month/year' hijri string to a Gregorian date."""
+    try:
+        parts = hijri_str.split("/")
+        if len(parts) != 3:
+            return None
+        day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+        return Hijri(year, month, day).to_gregorian().date()
+    except Exception:
+        return None
+
+
 def _apply_metadata(doc: "RagSourceDocument", payload: Dict[str, Any]) -> None:
+    print(f"payload {payload}")
     """Write structured metadata fields from the S3 JSON payload onto the model instance."""
-    meta: Dict[str, Any] = payload.get("metadata") or {}
+    meta: Dict[str, Any] = payload.get("metadata") or payload
 
     doc.doc_type = meta.get("doc_type") or None
     doc.entity = meta.get("entity") or None
@@ -285,6 +326,16 @@ def _apply_metadata(doc: "RagSourceDocument", payload: Dict[str, Any]) -> None:
     else:
         doc.date_gregorian = None
 
+    # If date_hijri_dual was missing, try to derive both dates from date_hijri
+    if not doc.date_hijri:
+        raw_hijri = meta.get("date_hijri")
+        if raw_hijri:
+            parsed = _parse_arabic_hijri(raw_hijri)
+            if parsed:
+                doc.date_hijri = parsed
+                if not doc.date_gregorian:
+                    doc.date_gregorian = _hijri_str_to_gregorian(parsed)
+
 
 def _build_description_input(payload: Dict[str, Any], clean_text: str) -> str:
     """
@@ -292,7 +343,7 @@ def _build_description_input(payload: Dict[str, Any], clean_text: str) -> str:
     description — and its embedding — encodes document identity (type, entity,
     date, decision number) alongside content semantics.
     """
-    meta: Dict[str, Any] = payload.get("metadata") or {}
+    meta: Dict[str, Any] = payload.get("metadata") or payload
 
     parts = []
     if meta.get("doc_type"):

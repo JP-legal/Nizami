@@ -4,7 +4,9 @@ justify-center flex items-center
 hover:bg-grey-500 w-10 h-10
 "
         [ngClass]="klass"
-        type="submit"
+        [type]="buttonType()"
+        [attr.aria-label]="ariaLabel() ?? null"
+        [attr.aria-pressed]="ariaPressed() === undefined ? null : ariaPressed()"
         [disabled]="disabled()"
         (click)="onClick.emit()"
 >

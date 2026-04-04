@@ -28,6 +28,20 @@ bg-white border-2 border-grey1 rounded-xl p-1 mx-6 xl:mx-auto"
       }
     </div>
 
+    @if (speechToText.isListening()) {
+      <div
+        class="flex items-center gap-2.5 mx-1 px-3 py-2 rounded-lg bg-blue1/10 border border-blue1/40 text-sm text-gray-800"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="relative flex h-3 w-3 shrink-0" aria-hidden="true">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue1 opacity-60"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-blue1"></span>
+        </span>
+        <span class="leading-snug">{{ 'voice_input.listening_banner' | translate }}</span>
+      </div>
+    }
+
     <div class="flex flex-row gap-1 items-center pr-1">
       <textarea [placeholder]="'send_message' | translate"
                 class="resize-none w-full focus:outline-none focus:placeholder-gray-400 text-gray-600 placeholder-grey11  my-3
@@ -49,6 +63,25 @@ bg-white border-2 border-grey1 rounded-xl p-1 mx-6 xl:mx-auto"
         >
           <ng-icon name="heroPaperClip" size="20"></ng-icon>
         </app-icon-button>
+
+        <div
+          class="rounded-lg shrink-0 transition-shadow"
+          [class.ring-2]="speechToText.isListening()"
+          [class.ring-blue1]="speechToText.isListening()"
+          [class.ring-offset-2]="speechToText.isListening()"
+          [class.ring-offset-white]="speechToText.isListening()"
+        >
+          <app-icon-button
+            [type]="speechToText.isListening() ? 'primary' : 'default'"
+            buttonType="button"
+            [disabled]="micDisabled || !speechToText.isSupported()"
+            [ariaLabel]="(speechToText.isListening() ? 'voice_input.stop_dictation' : 'voice_input.start_dictation') | translate"
+            [ariaPressed]="speechToText.isListening()"
+            (onClick)="toggleDictation()"
+          >
+            <ng-icon name="heroMicrophone" size="20"></ng-icon>
+          </app-icon-button>
+        </div>
 
         <app-icon-button
           type="primary"

@@ -1,4 +1,4 @@
-import {Component, effect, ElementRef, input, OnInit, output, signal, viewChild, WritableSignal} from '@angular/core';
+import {Component, effect, ElementRef, input, OnDestroy, OnInit, output, signal, viewChild, WritableSignal} from '@angular/core';
 import {FormControl, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {IsTypingService} from '../../services/is-typing.service';
 import {ChatInputService} from '../../services/chat-input.service';
@@ -14,6 +14,8 @@ import {ChatSideBarService} from '../../services/chat-side-bar.service';
 import {TranslatePipe, TranslateService} from '@ngx-translate/core';
 import {ToastrService} from 'ngx-toastr';
 import {marker} from '@colsen1991/ngx-translate-extract-marker';
+import {SpeechToTextErrorCode, SpeechToTextService} from '../../services/speech-to-text.service';
+import {AuthService} from '../../../auth/services/auth.service';
 
 @UntilDestroy()
 @Component({
@@ -30,7 +32,7 @@ import {marker} from '@colsen1991/ngx-translate-extract-marker';
   styleUrl: './chat-input.component.scss',
   templateUrl: './chat-input.component.html'
 })
-export class ChatInputComponent implements OnInit {
+export class ChatInputComponent implements OnInit, OnDestroy {
   textarea = viewChild<ElementRef<HTMLTextAreaElement>>('input');
   filesInput = viewChild<ElementRef<HTMLInputElement>>('filesInput')
 
@@ -49,6 +51,9 @@ export class ChatInputComponent implements OnInit {
     text: new FormControl<string>('', [Validators.required, Validators.minLength(1)]),
   });
 
+  /** Last recognition-only segment applied; removed from the end of the field before each new update when it still matches. */
+  private speechLastLiveSession = '';
+
   constructor(
     private isTypingService: IsTypingService,
     private chatInputService: ChatInputService,
@@ -56,6 +61,8 @@ export class ChatInputComponent implements OnInit {
     public sidebar: ChatSideBarService,
     private toastr: ToastrService,
     private translate: TranslateService,
+    private auth: AuthService,
+    protected speechToText: SpeechToTextService,
   ) {
     this.chatInputService.textareaControl = this.form.controls.text;
 
@@ -78,6 +85,123 @@ export class ChatInputComponent implements OnInit {
     this.chatInputService.textarea = this.textarea;
     if(this.filesInput()) {
       this.chatInputService.filesInput.set(this.filesInput()!.nativeElement);
+    }
+
+    this.speechToText.liveSessionTranscript$
+      .pipe(untilDestroyed(this))
+      .subscribe((sessionLive) => {
+        this.applySpeechSessionLive(sessionLive);
+      });
+
+    this.speechToText.errors$
+      .pipe(untilDestroyed(this))
+      .subscribe((code) => {
+        const key = this.voiceErrorTranslationKey(code);
+        if (key != null) {
+          this.toastr.error(this.translate.instant(key));
+        }
+      });
+  }
+
+  ngOnDestroy() {
+    this.speechLastLiveSession = '';
+    this.speechToText.stop();
+  }
+
+  get micDisabled(): boolean {
+    return (
+      this.disabled() ||
+      this.form.disabled ||
+      this.uploadingFilesCount > 0 ||
+      this.isTyping()
+    );
+  }
+
+  toggleDictation() {
+    if (this.micDisabled) {
+      return;
+    }
+    if (!this.speechToText.isSupported()) {
+      this.toastr.error(this.translate.instant(marker('voice_input.not_supported')));
+      return;
+    }
+    if (this.speechToText.isListening()) {
+      this.speechLastLiveSession = '';
+      this.speechToText.stop();
+      return;
+    }
+    this.speechLastLiveSession = '';
+    const speechLang = this.speechToText.mapAppLangToSpeechLang(this.resolveSpeechAppLangCode());
+    this.speechToText.start(speechLang);
+  }
+
+  /**
+   * Prefer the signed-in user's profile language so dictation matches French/Hindi/Urdu
+   * even when the UI translator is still on ar/en only.
+   */
+  private resolveSpeechAppLangCode(): string {
+    const fromProfile = this.auth.user()?.language?.trim();
+    if (fromProfile) {
+      return fromProfile;
+    }
+    return this.translate.currentLang || this.translate.getDefaultLang() || 'ar';
+  }
+
+  /**
+   * Re-applies the live transcript on top of whatever is in the textarea now: if the previous
+   * session text is still at the end, it is replaced; otherwise the whole field is treated as
+   * the prefix so edits while speaking stay in place.
+   */
+  private applySpeechSessionLive(sessionLive: string): void {
+    const ctrl = this.form.controls.text;
+    const current = ctrl.value ?? '';
+    let prefix = current;
+
+    if (this.speechLastLiveSession.length > 0 && current.endsWith(this.speechLastLiveSession)) {
+      prefix = current.slice(0, current.length - this.speechLastLiveSession.length);
+    }
+
+    const next = sessionLive
+      ? this.combineDictationPrefixAndLive(prefix, sessionLive)
+      : prefix;
+
+    this.speechLastLiveSession = sessionLive;
+    ctrl.setValue(next);
+    this.editingText();
+  }
+
+  /** Joins text that was already in the field with the live recognition stream (Arabic + Latin). */
+  private combineDictationPrefixAndLive(prefix: string, live: string): string {
+    if (!live) {
+      return prefix;
+    }
+    if (!prefix) {
+      return live;
+    }
+    const prefixEndsSpace = /\s$/u.test(prefix);
+    const liveStartsSpace = /^\s/u.test(live);
+    if (prefixEndsSpace || liveStartsSpace) {
+      return prefix + live;
+    }
+    return `${prefix} ${live}`;
+  }
+
+  private voiceErrorTranslationKey(code: SpeechToTextErrorCode): string | null {
+    switch (code) {
+      case 'not_supported':
+        return marker('voice_input.not_supported');
+      case 'not_allowed':
+        return marker('voice_input.permission_denied');
+      case 'no_speech':
+        return marker('voice_input.no_speech');
+      case 'network':
+        return marker('voice_input.network_error');
+      case 'service_not_allowed':
+        return marker('voice_input.service_not_allowed');
+      case 'generic':
+        return marker('voice_input.recognition_error');
+      default:
+        return null;
     }
   }
 

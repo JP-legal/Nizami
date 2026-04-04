@@ -9,4 +9,6 @@ export interface UserModel {
 
   profile_image?: string;
   date_of_birth?: string;
+  /** Preferred UI/speech language (ISO code: ar, en, fr, hi, ur, …). */
+  language?: string;
 }

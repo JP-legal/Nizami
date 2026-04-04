@@ -14,6 +14,10 @@ export class IconButtonComponent {
   onClick = output();
 
   disabled = input(false);
+  /** Use `button` for controls that must not submit a parent form. */
+  buttonType = input<'button' | 'submit'>('submit');
+  ariaLabel = input<string | undefined>(undefined);
+  ariaPressed = input<boolean | undefined>(undefined);
 
   get klass() {
     if (this.type() == IconButtonType.primary) {
