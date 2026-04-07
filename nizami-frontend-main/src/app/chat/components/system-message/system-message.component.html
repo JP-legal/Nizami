@@ -26,6 +26,12 @@
         ></ngx-typed-writer>
       } @else {
         <div [innerHTML]="text | safeHtml"></div>
+        @if (hasAnswerMetadata()) {
+          <app-answer-metadata
+            [metadata]="message().metadata_json!"
+            [isRtl]="message().language !== 'en'"
+          />
+        }
       }
     </div>
   </div>

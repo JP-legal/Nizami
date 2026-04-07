@@ -80,7 +80,8 @@ class ListMessagesSerializer(serializers.ModelSerializer):
         model = Message
         fields = ['id', 'uuid', 'chat_id', 'text', 'created_at', 'role', 'messageFiles',
                   'attachments',
-                  'translation_disclaimer_language', 'show_translation_disclaimer', 'language']
+                  'translation_disclaimer_language', 'show_translation_disclaimer', 'language',
+                  'metadata_json']
         depth = 1
 
     chat_id = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -115,6 +116,7 @@ class CreateMessageSerializer(serializers.Serializer):
     show_translation_disclaimer = serializers.BooleanField(required=False)
     translation_disclaimer_language = serializers.CharField(required=False)
     language = serializers.CharField(required=False, read_only=True)
+    metadata_json = serializers.JSONField(required=False, read_only=True)
 
     def create(self, validated_data):
         user = self.context['request'].user

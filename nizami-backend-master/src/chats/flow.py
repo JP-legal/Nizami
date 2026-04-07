@@ -34,6 +34,79 @@ from src.common.retrievers import FilteredRetriever
 from src.gibberish import GibberishConfig, classify_input, InputVerdict
 from src.reference_documents.models import RagSourceDocument
 
+_LEGAL_RESPONSE_METADATA_KEYS = (
+    'citations',
+    'dates_mentioned',
+    'numbers_and_percentages',
+    'statistics_from_context',
+)
+
+
+def _dedupe_documents_by_chunk_id(*, documents):
+    seen = set()
+    result = []
+    for doc in documents:
+        chunk_id = doc.metadata.get('id')
+        if chunk_id is not None:
+            key = f"id:{chunk_id}"
+        else:
+            ref = doc.metadata.get('rag_source_document_id') or doc.metadata.get('reference_document_id')
+            cidx = doc.metadata.get('chunk_index', '')
+            key = f"ref:{ref}:idx:{cidx}"
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(doc)
+    return result
+
+
+def _merge_retrieved_documents(*, retriever, query_text, translated_text):
+    combined = retriever.invoke(query_text) + retriever.invoke(translated_text)
+    return _dedupe_documents_by_chunk_id(documents=combined)
+
+
+def _format_numbered_context_for_rag(*, documents):
+    parts = []
+    for i, doc in enumerate(documents, 1):
+        title = (doc.metadata.get('title') or '').strip() or 'Source document'
+        ref_bits = []
+        ref_id = doc.metadata.get('reference_document_id')
+        if ref_id is not None:
+            ref_bits.append(f"reference_document_id={ref_id}")
+        rsd = doc.metadata.get('rag_source_document_id')
+        if rsd is not None:
+            ref_bits.append(f"rag_source_document_id={rsd}")
+        header = f"[{i}] {title}"
+        if ref_bits:
+            header += f" ({', '.join(ref_bits)})"
+        parts.append(f"{header}\n{doc.page_content}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _normalize_legal_response_payload(*, response):
+    if not isinstance(response, dict):
+        return response
+    normalized = dict(response)
+    for key in _LEGAL_RESPONSE_METADATA_KEYS:
+        value = normalized.get(key)
+        if not isinstance(value, list):
+            normalized[key] = []
+    return normalized
+
+
+def _message_metadata_from_response(*, response):
+    if not isinstance(response, dict):
+        return None
+    if not any(k in response for k in _LEGAL_RESPONSE_METADATA_KEYS):
+        return None
+    payload = {}
+    for key in _LEGAL_RESPONSE_METADATA_KEYS:
+        val = response.get(key)
+        payload[key] = val if isinstance(val, list) else []
+    if not any(payload.values()):
+        return None
+    return payload
+
 
 class State(TypedDict):
     input: str
@@ -577,6 +650,8 @@ def store_system_message(state: State):
     question_language = user_message.language
     chat_id = user_message.chat_id
 
+    metadata_json = _message_metadata_from_response(response=response)
+
     system_message = Message.objects.create(
         chat_id=chat_id,
         parent=user_message,
@@ -586,6 +661,7 @@ def store_system_message(state: State):
         translation_disclaimer_language=question_language,
         role='ai',
         uuid=uuid.uuid4(),
+        metadata_json=metadata_json,
     )
     
     update_chat_summary(chat_id, [user_message, system_message])
@@ -710,7 +786,14 @@ def answer_legal_question(state: State):
     def format_docs(docs):
         if len(docs) == 0:
             logger.warning('No documents retrieved! Context will be empty.')
-        return "\n\n".join(doc.page_content for doc in docs)
+        return _format_numbered_context_for_rag(documents=docs)
+
+    def merge_retrieved_documents(inputs):
+        return _merge_retrieved_documents(
+            retriever=retriever,
+            query_text=inputs['input'],
+            translated_text=inputs['translated_input'],
+        )
 
     with connection.cursor() as cursor:
         try:
@@ -719,8 +802,7 @@ def answer_legal_question(state: State):
             logger.error(f"Error setting hnsw.ef_search: {e}")
     
     rag_chain = (
-            RunnablePassthrough.assign(source_documents=RunnableLambda(
-                lambda x: retriever.invoke(x['input']) + retriever.invoke(x['translated_input'])))
+            RunnablePassthrough.assign(source_documents=RunnableLambda(merge_retrieved_documents))
             | RunnablePassthrough.assign(context=lambda inputs: format_docs(inputs["source_documents"]))
             | RunnablePassthrough.assign(prompt=lambda inputs: prompt.format_messages(
         input=inputs["input"],
@@ -801,7 +883,11 @@ def decode_response_json(state: State):
     if response.startswith('```json') and response.endswith('```'):
         response = response[7:-3].strip()
     try:
-        response = json.loads(response)
+        parsed = json.loads(response)
+        if isinstance(parsed, dict):
+            response = _normalize_legal_response_payload(response=parsed)
+        else:
+            response = {'answer': str(parsed)}
     except json.decoder.JSONDecodeError:
         response = {
             'answer': response,
