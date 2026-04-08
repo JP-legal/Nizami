@@ -2,8 +2,8 @@
     "family": "nizami-migrate",
     "networkMode": "awsvpc",
     "requiresCompatibilities": ["FARGATE"],
-    "cpu": "512",
-    "memory": "1024",
+    "cpu": "256",
+    "memory": "512",
     "taskRoleArn": "arn:aws:iam::189523310609:role/nizami-ecs-task-role",
     "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
     "containerDefinitions": [{
