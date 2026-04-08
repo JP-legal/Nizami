@@ -31,6 +31,9 @@
         { "name": "USE_LOCALSTACK_S3",                        "value": "False" },
         { "name": "ATTACHMENT_EXTRACTION_WAIT_TIMEOUT_SEC",   "value": "60" },
         { "name": "ATTACHMENT_EXTRACTION_POLL_INTERVAL_SEC",  "value": "0.5" },
+        { "name": "AWS_STORAGE_BUCKET_NAME",                 "value": "nizami-users-input-documents-bucket-eu" },
+        { "name": "RAG_S3_BUCKET",                       "value": "nizami-clean-eu" },
+        { "name": "RAG_S3_PREFIX",                        "value": "processed/" },
         { "name": "FRONTEND_DOMAIN",                          "value": "https://app.nizami.ai" }
       ],
       "secrets": [

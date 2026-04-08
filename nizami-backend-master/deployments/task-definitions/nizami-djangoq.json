@@ -33,6 +33,9 @@
         { "name": "EMAIL_HOST_USER",                     "value": "hello@nizami.ai" },
         { "name": "EMAIL_FROM_ADDRESS",                  "value": "hello@nizami.ai" },
         { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com/v1/" },
+        { "name": "AWS_STORAGE_BUCKET_NAME",                 "value": "nizami-users-input-documents-bucket-eu" },
+        { "name": "RAG_S3_BUCKET",                       "value": "nizami-clean-eu" },
+        { "name": "RAG_S3_PREFIX",                        "value": "processed/" },
         { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" }
       ],
       "secrets": [
