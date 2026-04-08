@@ -1,38 +1,35 @@
 {
-  "family": "nizami-migrate",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/nizami-ecs-task-role",
-  "containerDefinitions": [
-    {
+    "family": "nizami-migrate",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "512",
+    "memory": "1024",
+    "taskRoleArn": "arn:aws:iam::189523310609:role/nizami-ecs-task-role",
+    "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
+    "containerDefinitions": [{
       "name": "web",
-      "image": "${ECR_REPO}:${IMAGE_TAG}",
-      "essential": true,
+      "image": "189523310609.dkr.ecr.eu-west-1.amazonaws.com/nizami/backend:latest",
       "command": ["python", "manage.py", "migrate", "--noinput"],
       "environment": [
-        { "name": "DEBUG",             "value": "False" },
-        { "name": "AWS_DEFAULT_REGION","value": "${AWS_REGION}" }
+        { "name": "DEBUG", "value": "False" },
+        { "name": "DB_HOST", "value": "pgbouncer.nizami.local" },
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_NAME", "value": "nizami_db" },
+        { "name": "DB_USER", "value": "nizami_user" }
       ],
       "secrets": [
-        { "name": "SECRET_KEY",  "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-django:SECRET_KEY::" },
-
-        { "name": "DB_DATABASE", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_DATABASE::" },
-        { "name": "DB_USERNAME", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_USERNAME::" },
-        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PASSWORD::" },
-        { "name": "DB_HOST",     "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_HOST::" },
-        { "name": "DB_PORT",     "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PORT::" }
+        { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/SECRET_KEY-DwTz5S" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_PASSWORD-esr0g9" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/REDIS_URL-LBJxkG" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/nizami/web",
-          "awslogs-region": "${AWS_REGION}",
+          "awslogs-region": "eu-west-1",
           "awslogs-stream-prefix": "migrate"
         }
       }
-    }
-  ]
-}
+    }]
+  }

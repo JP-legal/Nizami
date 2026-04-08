@@ -1,0 +1,35 @@
+{
+    "family": "nizami-pgbouncer",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "256",
+    "memory": "512",
+    "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
+    "containerDefinitions": [{
+      "name": "pgbouncer",
+      "image": "edoburu/pgbouncer:latest",
+      "portMappings": [{ "containerPort": 5432, "protocol": "tcp" }],
+      "environment": [
+        { "name": "DB_HOST", "value": "nizami-postgres.cx6qcq6sqaet.eu-west-1.rds.amazonaws.com"},
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_NAME", "value": "nizami_db" },
+        { "name": "DB_USER", "value": "nizami_user" },
+        { "name": "POOL_MODE", "value": "transaction" },
+        { "name": "MAX_CLIENT_CONN", "value": "100" },
+        { "name": "DEFAULT_POOL_SIZE", "value": "20" },
+        { "name": "SERVER_RESET_QUERY", "value": "DISCARD ALL" }
+      ],
+      "secrets": [{
+        "name": "DB_PASSWORD",
+        "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_PASSWORD-esr0g9"
+      }],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/nizami/pgbouncer",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "pgbouncer"
+        }
+      }
+    }]
+}
