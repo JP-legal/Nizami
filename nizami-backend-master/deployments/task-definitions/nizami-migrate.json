@@ -12,7 +12,6 @@
       "command": ["python", "manage.py", "migrate", "--noinput"],
       "environment": [
         { "name": "DEBUG", "value": "False" },
-        { "name": "DB_HOST", "value": "pgbouncer.nizami.local" },
         { "name": "DB_PORT", "value": "5432" },
         { "name": "DB_NAME", "value": "nizami_db" },
         { "name": "DB_USER", "value": "nizami_user" },
@@ -42,7 +41,8 @@
         { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" },
         { "name": "MOYASAR_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_SECRET_KEY-CU3aaM" },
         { "name": "MOYASAR_WEBHOOK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_WEBHOOK_SECRET_KEY-73KdLP" },
-        { "name": "EMAIL_HOST_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" }
+        { "name": "EMAIL_HOST_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" },
+        { "name": "DB_HOST", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_HOST-dAqBRm" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
