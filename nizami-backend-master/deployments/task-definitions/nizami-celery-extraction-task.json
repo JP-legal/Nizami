@@ -1,0 +1,56 @@
+{
+  "family": "nizami-celery-extraction",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "taskRoleArn": "arn:aws:iam::189523310609:role/nizami-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "celery-extraction",
+      "image": "189523310609.dkr.ecr.eu-west-1.amazonaws.com/nizami/backend:latest",
+      "essential": true,
+      "command": [
+        "celery", "-A", "src.celery", "worker",
+        "--queues", "extraction",
+        "--concurrency", "2",
+        "--loglevel", "info"
+      ],
+      "environment": [
+        { "name": "DEBUG",                                    "value": "False" },
+        { "name": "DB_PORT",                                  "value": "5432" },
+        { "name": "DB_NAME",                                  "value": "nizami_db" },
+        { "name": "DB_USER",                                  "value": "nizami_user" },
+        { "name": "DJANGO_SETTINGS_MODULE",                   "value": "src.settings" },
+        { "name": "AWS_REGION",                               "value": "eu-west-1" },
+        { "name": "AWS_S3_REGION_NAME",                       "value": "eu-west-1" },
+        { "name": "AWS_DEFAULT_REGION",                       "value": "eu-west-1" },
+        { "name": "RAG_S3_REGION",                            "value": "eu-west-1" },
+        { "name": "USE_OPENAI_FOR_EXTRACTION",                "value": "True" },
+        { "name": "USE_LOCALSTACK_S3",                        "value": "False" },
+        { "name": "ATTACHMENT_EXTRACTION_WAIT_TIMEOUT_SEC",   "value": "60" },
+        { "name": "ATTACHMENT_EXTRACTION_POLL_INTERVAL_SEC",  "value": "0.5" },
+        { "name": "FRONTEND_DOMAIN",                          "value": "https://app.nizami.ai" }
+      ],
+      "secrets": [
+        { "name": "SECRET_KEY",                   "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/SECRET_KEY-DwTz5S" },
+        { "name": "DB_PASSWORD",                  "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_PASSWORD-esr0g9" },
+        { "name": "DB_HOST",                      "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_HOST-dAqBRm" },
+        { "name": "REDIS_URL",                    "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/REDIS_URL-LBJxkG" },
+        { "name": "OPENAI_API_KEY",               "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" },
+        { "name": "MOYASAR_SECRET_KEY",           "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_SECRET_KEY-CU3aaM" },
+        { "name": "MOYASAR_WEBHOOK_SECRET_KEY",   "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_WEBHOOK_SECRET_KEY-73KdLP" },
+        { "name": "EMAIL_HOST_PASSWORD",          "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/nizami/celery-extraction",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "celery-extraction"
+        }
+      }
+    }
+  ]
+}

@@ -47,7 +47,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-test-key-change-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+DEBUG = env('DEBUG', False)
 # Default value is only for testing - production must set ASPOSE_LICENSE_PATH environment variable
 ASPOSE_LICENSE_PATH = env('ASPOSE_LICENSE_PATH', default='')
 
