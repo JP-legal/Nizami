@@ -291,12 +291,12 @@ if TESTING:
     EMAIL_HOST_PASSWORD = ''
     EMAIL_FROM_ADDRESS = 'test@example.com'
 else:
-    EMAIL_HOST = env('EMAIL_HOST', 'smtp.mailgun.org')
-    EMAIL_PORT = env('EMAIL_PORT', 587)
-    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', True)
-    EMAIL_HOST_USER = env('EMAIL_HOST_USER', 'hello@nizami.ai')
-    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD','')
-    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS', 'hello@nizami.ai')
+    EMAIL_HOST = env('EMAIL_HOST', default='smtp.mailgun.org')
+    EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='hello@nizami.ai')
+    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS', default='hello@nizami.ai')
 # MAIL_MAILER=smtp
 
 
