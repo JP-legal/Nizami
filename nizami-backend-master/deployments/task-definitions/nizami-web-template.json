@@ -26,9 +26,11 @@
         { "name": "USE_LOCALSTACK_S3",                   "value": "False" },
         { "name": "EMAIL_PORT",                          "value": "587" },
         { "name": "EMAIL_USE_TLS",                       "value": "True" },
-        { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com" },
-        { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" },
-        { "name": "FRONTEND_RESET_PASSWORD_TEMPLATE",    "value": "/reset-password" }
+        { "name": "EMAIL_HOST",                          "value": "smtp.mailgun.org" },
+        { "name": "EMAIL_HOST_USER",                     "value": "hello@nizami.ai" },
+        { "name": "EMAIL_FROM_ADDRESS",                  "value": "hello@nizami.ai" },
+        { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com/v1/" },
+        { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" }
       ],
       "secrets": [
         { "name": "SECRET_KEY",             "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-django:SECRET_KEY::" },
@@ -38,8 +40,6 @@
         { "name": "DB_PASSWORD",            "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PASSWORD::" },
         { "name": "DB_HOST",                "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_HOST::" },
         { "name": "DB_PORT",                "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PORT::" },
-
-        { "name": "OPENAI_API_KEY",         "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-openai:OPENAI_API_KEY::" },
 
         { "name": "AWS_ACCESS_KEY_ID",      "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-aws-s3:AWS_ACCESS_KEY_ID::" },
         { "name": "AWS_SECRET_ACCESS_KEY",  "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-aws-s3:AWS_SECRET_ACCESS_KEY::" },

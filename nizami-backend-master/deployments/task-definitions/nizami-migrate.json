@@ -15,13 +15,35 @@
         { "name": "DB_HOST", "value": "pgbouncer.nizami.local" },
         { "name": "DB_PORT", "value": "5432" },
         { "name": "DB_NAME", "value": "nizami_db" },
-        { "name": "DB_USER", "value": "nizami_user" }
+        { "name": "DB_USER", "value": "nizami_user" },
+        { "name": "DJANGO_SETTINGS_MODULE", "value": "src.settings" },
+        { "name": "REDIS_URL", "value": "redis://nizami-redis.riprjp.0001.euw1.cache.amazonaws.com:6379/0" },
+        { "name": "AWS_REGION", "value": "eu-west-1" },
+        { "name": "DEBUG",                               "value": "False" },
+        { "name": "RAG_SOURCE",                          "value": "old" },
+        { "name": "USE_OPENAI_FOR_EXTRACTION",           "value": "True" },
+        { "name": "ATTACHMENT_EXTRACTION_WAIT_TIMEOUT_SEC", "value": "60" },
+        { "name": "ATTACHMENT_EXTRACTION_POLL_INTERVAL_SEC", "value": "0.5" },
+        { "name": "AWS_S3_REGION_NAME",                  "value": "${AWS_REGION}" },
+        { "name": "AWS_DEFAULT_REGION",                  "value": "${AWS_REGION}" },
+        { "name": "RAG_S3_REGION",                       "value": "${AWS_REGION}" },
+        { "name": "USE_LOCALSTACK_S3",                   "value": "False" },
+        { "name": "EMAIL_PORT",                          "value": "587" },
+        { "name": "EMAIL_USE_TLS",                       "value": "True" },
+        { "name": "EMAIL_HOST",                          "value": "smtp.mailgun.org" },
+        { "name": "EMAIL_HOST_USER",                     "value": "hello@nizami.ai" },
+        { "name": "EMAIL_FROM_ADDRESS",                  "value": "hello@nizami.ai" },
+        { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com/v1/" },
+        { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" }
       ],
       "secrets": [
         { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/SECRET_KEY-DwTz5S" },
         { "name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_PASSWORD-esr0g9" },
         { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/REDIS_URL-LBJxkG" },
-        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" }
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" },
+        { "name": "MOYASAR_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_SECRET_KEY-CU3aaM" },
+        { "name": "MOYASAR_WEBHOOK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_WEBHOOK_SECRET_KEY-73KdLP" },
+        { "name": "EMAIL_HOST_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
