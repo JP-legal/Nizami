@@ -50,10 +50,23 @@ jobs:
           fi
 
       # ── AWS auth (OIDC — no long-lived keys) ─────────────────────────────────
+      - name: Validate AWS configuration (secrets & variables)
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${{ secrets.AWS_ROLE_ARN_PROD }}" ] && missing+=("secret AWS_ROLE_ARN_PROD")
+          [ -z "${{ vars.AWS_REGION }}" ] && missing+=("variable AWS_REGION")
+          [ -z "${{ vars.ECR_BACKEND_REPO }}" ] && missing+=("variable ECR_BACKEND_REPO")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing: ${missing[*]}. Add under repo Settings → Secrets and variables → Actions, or under the production environment if you scope secrets there. See nizami-backend-master/docs/AWS_PRODUCTION_DEPLOY.md (OIDC role + trust policy)."
+            exit 1
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
 
       # ── Build & push backend image ───────────────────────────────────────────
       - name: Login to ECR
