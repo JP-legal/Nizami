@@ -17,7 +17,6 @@
         { "name": "DB_NAME", "value": "nizami_db" },
         { "name": "DB_USER", "value": "nizami_user" },
         { "name": "DJANGO_SETTINGS_MODULE", "value": "src.settings" },
-        { "name": "REDIS_URL", "value": "redis://nizami-redis.riprjp.0001.euw1.cache.amazonaws.com:6379/0" },
         { "name": "AWS_REGION", "value": "eu-west-1" },
         { "name": "DEBUG",                               "value": "False" },
         { "name": "RAG_SOURCE",                          "value": "old" },
