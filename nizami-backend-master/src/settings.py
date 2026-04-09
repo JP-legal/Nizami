@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import json
 import os
 import sys
 from datetime import timedelta
@@ -338,9 +339,10 @@ try:
         embeddings=embeddings,
         connection=get_db_url(),
         distance_strategy=DistanceStrategy.COSINE,
+        create_extension=False,
     )
-except Exception:
-    # If initialization fails, set to None
+except Exception as ex:
+    print(json.dumps(dict(msg='PGVector init failed', error=str(ex)), default=str))
     embeddings = None
     vectorstore = None
 
@@ -370,4 +372,3 @@ RAG_S3_REGION = env('RAG_S3_REGION', default=env('AWS_DEFAULT_REGION', default='
 # "old" = use langchain_pg_embedding (ReferenceDocument pipeline)
 # "new" = use RagSourceDocumentChunk table (S3 RAG pipeline)
 RAG_SOURCE = env('RAG_SOURCE', default='old')
-
