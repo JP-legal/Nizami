@@ -16,7 +16,7 @@
       ],
       "environment": [
         { "name": "DEBUG",                               "value": "False" },
-        { "name": "RAG_SOURCE",                          "value": "old" },
+        { "name": "RAG_SOURCE",                          "value": "new" },
         { "name": "USE_OPENAI_FOR_EXTRACTION",           "value": "True" },
         { "name": "ATTACHMENT_EXTRACTION_WAIT_TIMEOUT_SEC", "value": "60" },
         { "name": "ATTACHMENT_EXTRACTION_POLL_INTERVAL_SEC", "value": "0.5" },
