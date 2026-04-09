@@ -22,7 +22,7 @@ RUN apt-get update && \
 
 # Python 3.12+ does not ship pkg_resources; django-q needs it. Install setuptools before any app deps.
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "setuptools==65.0.0"
+    pip install --no-cache-dir "setuptools==82.0.1"
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
