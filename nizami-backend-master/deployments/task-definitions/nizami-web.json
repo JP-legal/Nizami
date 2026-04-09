@@ -5,6 +5,7 @@
     "memory": "1024",
     "networkMode": "awsvpc",
     "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
+    "taskRoleArn": "arn:aws:iam::189523310609:role/nizami-web-task-role",
     "containerDefinitions": [
       {
         "name": "web",
