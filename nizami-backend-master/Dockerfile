@@ -1,12 +1,23 @@
 FROM python:3.12
 
+ENV PYTHONIOENCODING=utf-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 WORKDIR /app
 
 # Install system dependencies required for Aspose.Words (ICU libraries for .NET globalization)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libicu-dev \
-    icu-devtools && \
+    icu-devtools \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
+    fonts-liberation && \
     rm -rf /var/lib/apt/lists/*
 
 # Python 3.12+ does not ship pkg_resources; django-q needs it. Install setuptools before any app deps.
