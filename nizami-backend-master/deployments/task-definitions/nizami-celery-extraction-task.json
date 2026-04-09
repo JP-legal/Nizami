@@ -37,7 +37,6 @@
         { "name": "AWS_STORAGE_BUCKET_NAME",                 "value": "nizami-users-input-documents-bucket-eu" },
         { "name": "RAG_S3_BUCKET",                       "value": "nizami-clean-eu" },
         { "name": "RAG_S3_PREFIX",                        "value": "processed/" },
-        { "name": "AWS_ACCESS_KEY_ID",           "value": "AKIASYIDYHAITKV6C6F7" },
         { "name": "FRONTEND_DOMAIN",                          "value": "https://app.nizami.ai" }
       ],
       "secrets": [
@@ -48,7 +47,6 @@
         { "name": "OPENAI_API_KEY",               "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" },
         { "name": "MOYASAR_SECRET_KEY",           "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_SECRET_KEY-CU3aaM" },
         { "name": "MOYASAR_WEBHOOK_SECRET_KEY",   "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_WEBHOOK_SECRET_KEY-73KdLP" },
-        { "name": "AWS_SECRET_ACCESS_KEY",        "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/AWS_SECRET_ACCESS_KEY-0sihL6" },
         { "name": "EMAIL_HOST_PASSWORD",          "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" }
       ],
       "logConfiguration": {
