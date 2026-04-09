@@ -12,7 +12,10 @@
       "image": "189523310609.dkr.ecr.eu-west-1.amazonaws.com/nizami/backend:latest",
       "essential": true,
       "command": [
-        "celery", "-A", "src.celery", "worker",
+        "python", "-m", "celery",
+        "-A", "src.celery",
+        "worker",
+        "-n", "extraction@%h",
         "--queues", "extraction",
         "--concurrency", "2",
         "--loglevel", "info"

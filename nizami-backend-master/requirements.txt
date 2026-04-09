@@ -1,3 +1,5 @@
+hijri-converter==2.3.1
+openpyxl==3.1.5
 django-storages[s3]==1.14.4
 boto3==1.36.0
 weasyprint>=62.0
@@ -110,3 +112,5 @@ wcwidth==0.2.13
 xxhash==3.5.0
 yarl==1.18.3
 zstandard==0.23.0
+celery==5.2.2
+opentelemetry-instrumentation-celery
