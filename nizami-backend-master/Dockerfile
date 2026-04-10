@@ -26,6 +26,11 @@ RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
 
+# Pre-download the Flashrank reranker model at build time so workers never
+# download it at runtime (avoids the ~5s network hit and the race condition
+# where multiple workers extract the same zip to /tmp simultaneously).
+RUN python -c "from flashrank import Ranker; Ranker(model_name='ms-marco-MultiBERT-L-12', cache_dir='/app/models')"
+
 # Copy the rest of the application
 COPY . /app
 #RUN python src/manage.py collectstatic --noinput

@@ -48,13 +48,19 @@ class DocumentReranker:
     @staticmethod
     def _build_backend(top_n: int):
         try:
+            from flashrank import Ranker  # noqa: PLC0415
             from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank  # noqa: PLC0415
             # score_threshold=-1.0 ensures we always get up to top_n results.
             # The default 0.0 silently drops docs whose cross-encoder score is
             # below zero, so we could ask for 6 and receive 2 with no warning.
             # We trust vector retrieval for relevance filtering; the reranker's
             # job here is ordering only.
-            instance = FlashrankRerank(top_n=top_n, score_threshold=-1.0)
+            #
+            # Pass a pre-initialized Ranker so Flashrank reads from the model
+            # baked into the image (/app/models) instead of downloading to /tmp
+            # at runtime — which races when multiple workers start concurrently.
+            ranker = Ranker(model_name="ms-marco-MultiBERT-L-12", cache_dir="/app/models")
+            instance = FlashrankRerank(client=ranker, top_n=top_n, score_threshold=-1.0)
             logger.info("Flashrank reranker initialised with top_n=%d", top_n)
             return instance
         except Exception:
