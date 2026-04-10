@@ -5,7 +5,7 @@ import uuid
 import logging
 
 
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import Q
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -40,29 +40,6 @@ _LEGAL_RESPONSE_METADATA_KEYS = (
     'numbers_and_percentages',
     'statistics_from_context',
 )
-
-
-def _dedupe_documents_by_chunk_id(*, documents):
-    seen = set()
-    result = []
-    for doc in documents:
-        chunk_id = doc.metadata.get('id')
-        if chunk_id is not None:
-            key = f"id:{chunk_id}"
-        else:
-            ref = doc.metadata.get('rag_source_document_id') or doc.metadata.get('reference_document_id')
-            cidx = doc.metadata.get('chunk_index', '')
-            key = f"ref:{ref}:idx:{cidx}"
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(doc)
-    return result
-
-
-def _merge_retrieved_documents(*, retriever, query_text, translated_text):
-    combined = retriever.invoke(query_text) + retriever.invoke(translated_text)
-    return _dedupe_documents_by_chunk_id(documents=combined)
 
 
 def _format_numbered_context_for_rag(*, documents):
@@ -129,6 +106,8 @@ class State(TypedDict):
     output: str
     is_gibberish: bool
     is_related_to_history: bool
+    web_search_results: list  # Raw web search results captured for logging/debugging
+    url_context: str  # Extracted content from URLs shared by the user
 
 
 # Schema for structured output to use as routing logic
@@ -683,14 +662,78 @@ def store_system_message(state: State):
     }
 
 
+# Matches http/https URLs; stops at whitespace and common trailing punctuation.
+_URL_RE = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
+
+
+def extract_url_content(state: State):
+    """
+    Detect URLs in the user's message, fetch their content, and store it in
+    state so answer_legal_question can inject it into the LLM prompt.
+
+    Up to 3 URLs are fetched concurrently. If none are found or all fetches
+    fail the node returns an empty string and the rest of the flow is unaffected.
+    """
+    logger = logging.getLogger(__name__)
+    import concurrent.futures as _cf
+    from src.chats.web_search.url_extractor import fetch_url_content
+
+    input_text = state.get('input', '')
+    urls = list(dict.fromkeys(_URL_RE.findall(input_text)))[:3]  # dedupe, cap at 3
+
+    if not urls:
+        return {'url_context': ''}
+
+    results = []
+    with _cf.ThreadPoolExecutor(max_workers=len(urls)) as executor:
+        futures = {executor.submit(fetch_url_content, url): url for url in urls}
+        for future in _cf.as_completed(futures):
+            result = future.result()
+            if result:
+                results.append(result)
+
+    if not results:
+        logger.warning("extract_url_content: all URL fetches failed for input: %s", input_text[:120])
+        return {'url_context': ''}
+
+    parts = []
+    for i, r in enumerate(results, 1):
+        header = f"[Link{i}] {r.title}\n     Source: {r.url}"
+        parts.append(f"{header}\n{r.content}")
+
+    logger.info("extract_url_content: extracted content from %d URL(s)", len(results))
+    return {'url_context': "\n\n---\n\n".join(parts)}
+
+
+def _format_web_context(web_results) -> str:
+    """
+    Format web search results into a numbered block for the LLM system prompt.
+
+    Each result shows its index, title, URL, and cleaned content so the model
+    can cite sources and reason about freshness.
+    """
+    if not web_results:
+        return ""
+    parts = []
+    for i, r in enumerate(web_results, 1):
+        header = f"[W{i}] {r.title}"
+        if r.url:
+            header += f"\n     Source: {r.url}"
+        parts.append(f"{header}\n{r.content}")
+    return "\n\n---\n\n".join(parts)
+
+
 def answer_legal_question(state: State):
     t1 = time.time()
     logger = logging.getLogger(__name__)
-    
+
     user_message = state['message']
     translation = state['input_translation']
     query = state['query']
 
+    # ------------------------------------------------------------------
+    # 1. Identify relevant document IDs (unchanged from original logic)
+    # ------------------------------------------------------------------
     from src.settings import RAG_SOURCE
     if RAG_SOURCE == 'new':
         ids_all = find_rag_source_document_ids_by_description(query)
@@ -703,36 +746,42 @@ def answer_legal_question(state: State):
             .exclude(s3_key__istartswith=moj_prefix)
             .values_list("id", flat=True)
         )
-
         ids = ids_non_moj if ids_non_moj else ids_all
     else:
         ids = find_ref_document_ids_by_description(query)
 
     llm = create_legal_advice_llm()
     template = get_prompt_value_by_name(PromptType.LEGAL_ADVICE)
-
     retriever = FilteredRetriever(ids, k=8, logger=logger)
 
     if RAG_SOURCE == 'new':
-        search_kwargs = {'k': 10, 'source': 'RagSourceDocumentChunk', 'filter': {'rag_source_document_id': {'$in': ids}}}
+        search_kwargs = {
+            'k': 10,
+            'source': 'RagSourceDocumentChunk',
+            'filter': {'rag_source_document_id': {'$in': ids}},
+        }
     else:
-        search_kwargs = {'k': 8, 'source': 'langchain_pg_embedding', 'filter': {'reference_document_id': {'$in': ids}}}
+        search_kwargs = {
+            'k': 8,
+            'source': 'langchain_pg_embedding',
+            'filter': {'reference_document_id': {'$in': ids}},
+        }
 
-    # Use summary for context, with recent messages for immediate context
+    # ------------------------------------------------------------------
+    # 2. Build conversation history messages (fast — no I/O)
+    #    Run this while the retrieval threads are already running (step 3).
+    # ------------------------------------------------------------------
     summary = state.get('summary', '')
     history = state.get('history', [])
     unsummarized_messages = state.get('unsummarized_messages', [])
     attached_docs_context = state.get('attached_docs_context', '') or ''
-    
-    # Build history messages from summary and recent messages
+
     history_messages = []
     if summary:
-        # Add summary as context
         history_messages.append(SystemMessage(
             content=f"Conversation Summary (for context):\n{summary}"
         ))
     if attached_docs_context.strip():
-        # Add summaries of files the user uploaded in this chat so follow-up questions can use them
         history_messages.append(SystemMessage(
             content=(
                 "Uploaded documents in this chat (use for questions about the user's files):\n"
@@ -745,16 +794,11 @@ def answer_legal_question(state: State):
                 "question clearly refers to the document or prior conversation."
             )
         ))
-    
-    # Add messages that aren't in summary yet (from async update race condition)
-    # These are messages created after the last summarized message
     for msg in unsummarized_messages:
         if msg.role == 'user':
             history_messages.append(HumanMessage(content=msg.text))
         elif msg.role == 'ai':
             history_messages.append(AIMessage(content=msg.text))
-    
-    # Add recent messages (last 3 for immediate context)
     recent_messages = history[-3:] if len(history) > 3 else history
     for msg in recent_messages:
         if msg.role == 'user':
@@ -762,9 +806,7 @@ def answer_legal_question(state: State):
         elif msg.role == 'ai':
             history_messages.append(AIMessage(content=msg.text))
 
-    # Determine the response language based on user's input
     response_language = detect_language(user_message.text)
-    
     languages = {
         'ar': "Arabic",
         'en': "English",
@@ -772,55 +814,171 @@ def answer_legal_question(state: State):
         'hi': "Hindi",
         'ur': "Urdu",
     }
-    
-    # Update the template to explicitly instruct the LLM to respond in the determined language
-    language_instruction = f"IMPORTANT: You must respond ONLY in {languages[response_language]}. Do not mix languages. "
+    language_instruction = (
+        f"IMPORTANT: You must respond ONLY in {languages[response_language]}. "
+        "Do not mix languages. "
+    )
     updated_template = language_instruction + template
 
-    prompt = ChatPromptTemplate.from_messages([
+    # ------------------------------------------------------------------
+    # 3. Run RAG retrieval + web search in parallel
+    # ------------------------------------------------------------------
+    from src.chats.retrieval.orchestrator import RetrievalOrchestrator
+    from src.chats.web_search.service import get_web_search_service
+
+    web_service = get_web_search_service()
+    orchestrator = RetrievalOrchestrator(web_search_service=web_service)
+
+    logger.info(
+        "answer_legal_question: starting parallel retrieval | "
+        "query=%s | web_enabled=%s",
+        query[:80],
+        web_service is not None,
+    )
+    retrieval = orchestrator.run(
+        query=query,
+        translated_query=translation,
+        retriever=retriever,
+    )
+    logger.info(
+        "answer_legal_question: retrieval done | "
+        "rag_docs=%d | rag_ok=%s | web_results=%d | web_ok=%s",
+        len(retrieval.rag_documents),
+        retrieval.rag_success,
+        len(retrieval.web_results),
+        retrieval.web_success,
+    )
+
+    # ------------------------------------------------------------------
+    # 4. Decide whether we have enough context to answer
+    # ------------------------------------------------------------------
+    has_rag = bool(retrieval.rag_documents)
+    has_web = bool(retrieval.web_results)
+
+    if not has_rag and not has_web:
+        logger.warning(
+            "answer_legal_question: both RAG and web search returned no "
+            "results — returning safe fallback"
+        )
+        # Build a minimal response dict that preserves the expected structure
+        # so downstream nodes (decode_response_json, etc.) still work.
+        from langchain_core.messages import AIMessage as LCAIMessage
+        fallback_answer = {
+            'answer': (
+                "I'm sorry, I could not find relevant information to answer your question. "
+                "Please try rephrasing or consult a qualified legal professional."
+            )
+        }
+        import json as _json
+        fallback_response = {
+            'input': query,
+            'translated_input': translation,
+            'source_documents': [],
+            'context': '',
+            'prompt': [],
+            'response': LCAIMessage(content=_json.dumps(fallback_answer)),
+        }
+        t2 = time.time()
+        MessageStepLog.objects.create(
+            step_name='answer_legal_question',
+            message=user_message,
+            time_sec=t2 - t1,
+            input={'input': query, 'translated_input': translation, 'filters': search_kwargs},
+            output={'fallback': True, 'rag_ok': retrieval.rag_success, 'web_ok': retrieval.web_success},
+        )
+        return {
+            'rag_response': fallback_response,
+            'web_search_results': [],
+        }
+
+    # ------------------------------------------------------------------
+    # 5. Format contexts and build the final prompt
+    # ------------------------------------------------------------------
+    def format_rag_docs(docs):
+        if not docs:
+            logger.warning('No RAG documents retrieved — context will be empty.')
+        return _format_numbered_context_for_rag(documents=docs)
+
+    # The base prompt still receives internal RAG context via {context}.
+    # Web results are injected as a separate SystemMessage so the LLM can
+    # clearly distinguish the two sources and synthesise them correctly.
+    base_prompt = ChatPromptTemplate.from_messages([
         ("system", re.sub(r"\{language}", languages[response_language], updated_template)),
         *history_messages,
         ("human", "{input}"),
     ])
 
-    def format_docs(docs):
-        if len(docs) == 0:
-            logger.warning('No documents retrieved! Context will be empty.')
-        return _format_numbered_context_for_rag(documents=docs)
-
-    def merge_retrieved_documents(inputs):
-        return _merge_retrieved_documents(
-            retriever=retriever,
-            query_text=inputs['input'],
-            translated_text=inputs['translated_input'],
+    def build_prompt_messages(inputs):
+        """Build the final message list, injecting web and URL context when available."""
+        messages = base_prompt.format_messages(
+            input=inputs["input"],
+            context=inputs["context"],
         )
+        if inputs.get("url_context"):
+            url_instruction = SystemMessage(
+                content=(
+                    "=== Content From User-Shared Link(s) ===\n"
+                    "The user shared one or more links. The content has been extracted "
+                    "and is provided below. Use it to answer any questions the user has "
+                    "about those links. Cite the source URL when referencing this content.\n\n"
+                    f"{inputs['url_context']}\n"
+                    "=== End of Link Content ==="
+                )
+            )
+            messages.insert(len(messages) - 1, url_instruction)
+        if inputs.get("web_context"):
+            synthesis_instruction = SystemMessage(
+                content=(
+                    "=== Live Web Search Results ===\n"
+                    "The following results were retrieved from the web in real time. "
+                    "Use them to:\n"
+                    "  1. Validate whether your answer is still current\n"
+                    "  2. Fill gaps not covered by the internal documents above\n"
+                    "  3. Add recent legal developments relevant to the question\n"
+                    "If a web result conflicts with internal knowledge, mention the conflict "
+                    "and explain which source appears more recent or authoritative. "
+                    "Never fabricate information not present in either source.\n\n"
+                    f"{inputs['web_context']}\n"
+                    "=== End of Web Search Results ==="
+                )
+            )
+            # Insert before the final HumanMessage so the LLM sees the web
+            # context as close to the question as possible.
+            messages.insert(len(messages) - 1, synthesis_instruction)
+        return messages
 
-    with connection.cursor() as cursor:
-        try:
-            cursor.execute("SET LOCAL hnsw.ef_search = 32;")
-        except Exception as e:
-            logger.error(f"Error setting hnsw.ef_search: {e}")
-    
+    # ------------------------------------------------------------------
+    # 6. Build and invoke the answer chain with pre-fetched documents
+    # ------------------------------------------------------------------
+    pre_fetched_docs = retrieval.rag_documents
+    web_context_text = _format_web_context(retrieval.web_results) if has_web else ""
+    url_context_text = state.get('url_context', '') or ''
+
     rag_chain = (
-            RunnablePassthrough.assign(source_documents=RunnableLambda(merge_retrieved_documents))
-            | RunnablePassthrough.assign(context=lambda inputs: format_docs(inputs["source_documents"]))
-            | RunnablePassthrough.assign(prompt=lambda inputs: prompt.format_messages(
-        input=inputs["input"],
-        context=inputs["context"]
-    ))
-            | RunnablePassthrough.assign(response=lambda inputs: llm.invoke(inputs["prompt"]))
+        RunnablePassthrough.assign(source_documents=lambda _: pre_fetched_docs)
+        | RunnablePassthrough.assign(
+            context=lambda inputs: format_rag_docs(inputs["source_documents"])
+        )
+        | RunnablePassthrough.assign(web_context=lambda _: web_context_text)
+        | RunnablePassthrough.assign(url_context=lambda _: url_context_text)
+        | RunnablePassthrough.assign(prompt=RunnableLambda(build_prompt_messages))
+        | RunnablePassthrough.assign(response=lambda inputs: llm.invoke(inputs["prompt"]))
     )
 
+    logger.info("answer_legal_question: invoking LLM")
     response = rag_chain.invoke({
         'input': query,
         'translated_input': translation,
     })
 
+    # ------------------------------------------------------------------
+    # 7. Log and return (structure unchanged — downstream nodes rely on it)
+    # ------------------------------------------------------------------
     MessageLog.logs_objects.create(
         message=user_message,
         response=response,
     )
-    
+
     t2 = time.time()
     MessageStepLog.objects.create(
         step_name='answer_legal_question',
@@ -833,12 +991,19 @@ def answer_legal_question(state: State):
         },
         output={
             'rag_response': response,
-        }
+            'rag_docs': len(retrieval.rag_documents),
+            'web_results': len(retrieval.web_results),
+            'rag_elapsed_sec': retrieval.rag_elapsed_sec,
+            'web_elapsed_sec': retrieval.web_elapsed_sec,
+        },
     )
-
 
     return {
         'rag_response': response,
+        'web_search_results': [
+            {'title': r.title, 'url': r.url, 'score': r.score}
+            for r in retrieval.web_results
+        ],
     }
 
 
@@ -1330,6 +1495,7 @@ def build_graph():
     graph_builder.add_node('return_first_child', return_first_child)
     graph_builder.add_node('validate_input_quality', validate_input_quality)
     graph_builder.add_node('handle_gibberish_input', handle_gibberish_input)
+    graph_builder.add_node('extract_url_content', extract_url_content)
     graph_builder.add_node('check_input_relevance', check_input_relevance)
     graph_builder.add_node('handle_related_input', handle_related_input)
 
@@ -1356,7 +1522,8 @@ def build_graph():
         },
     )
 
-    graph_builder.add_edge("retrieve_history", "check_input_relevance")
+    graph_builder.add_edge("retrieve_history", "extract_url_content")
+    graph_builder.add_edge("extract_url_content", "check_input_relevance")
     
     # When input is related to history or uploaded docs (e.g. "give me more details"), answer using context.
     # Do not ask user to "be more specific"; rephrase and answer in detail.
