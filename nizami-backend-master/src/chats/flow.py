@@ -85,6 +85,95 @@ def _message_metadata_from_response(*, response):
     return payload
 
 
+def _deduplicate_and_renumber_citations(*, response):
+    """
+    Post-process the LLM response dict to:
+    1. Deduplicate citations that reference the same source
+       (matched on source_title + article_or_clause + law_number; falls back to reference).
+    2. Renumber surviving citations [1], [2], ... in order of first appearance in the answer.
+    3. Rewrite [n] markers in the answer text to match the new labels.
+    Returns a shallow-copied response dict with 'answer' and 'citations' updated.
+    """
+    if not isinstance(response, dict):
+        return response
+
+    citations = response.get('citations')
+    answer = response.get('answer') or ''
+
+    if not citations or not isinstance(citations, list):
+        return response
+
+    def _dedup_key(c):
+        title = (c.get('source_title') or '').strip().lower()
+        article = (c.get('article_or_clause') or '').strip().lower()
+        law_num = (c.get('law_number') or '').strip().lower()
+        key = f'{title}|{article}|{law_num}'
+        if key == '||':
+            key = (c.get('reference') or '').strip().lower()
+        return key
+
+    # Pass 1: deduplicate — keep first occurrence of each key.
+    # old_to_canonical maps each original label to the label of the citation it merges into.
+    seen_keys: dict = {}        # dedup_key -> canonical old_label
+    canonical_citations = []    # unique citations (copies)
+    old_to_canonical: dict = {} # old_label -> canonical old_label
+
+    for c in citations:
+        old_label = (c.get('label') or '').strip()
+        key = _dedup_key(c)
+        if key and key in seen_keys:
+            old_to_canonical[old_label] = seen_keys[key]
+        else:
+            if key:
+                seen_keys[key] = old_label
+            old_to_canonical[old_label] = old_label
+            canonical_citations.append(dict(c))
+
+    # Pass 2: determine order of first appearance of canonical labels in the answer.
+    markers_seen: list = []
+    markers_set: set = set()
+    for m in re.finditer(r'\[(\d+)\]', answer):
+        raw = f'[{m.group(1)}]'
+        canonical = old_to_canonical.get(raw, raw)
+        if canonical not in markers_set:
+            markers_seen.append(canonical)
+            markers_set.add(canonical)
+
+    # Build canonical_old_label -> new sequential label (only citations used in the text)
+    canonical_to_new: dict = {lbl: f'[{i}]' for i, lbl in enumerate(markers_seen, 1)}
+
+    # Build raw old_label -> new_label (routed through canonical)
+    final_map: dict = {
+        raw: canonical_to_new.get(canonical, canonical)
+        for raw, canonical in old_to_canonical.items()
+    }
+
+    # Rewrite [n] markers in the answer
+    updated_answer = re.sub(
+        r'\[(\d+)\]',
+        lambda m: final_map.get(f'[{m.group(1)}]', f'[{m.group(1)}]'),
+        answer,
+    )
+
+    # Keep only citations referenced in the answer; update their labels
+    canonical_citations = [
+        c for c in canonical_citations
+        if (c.get('label') or '').strip() in markers_set
+    ]
+    for c in canonical_citations:
+        old_label = (c.get('label') or '').strip()
+        c['label'] = canonical_to_new.get(old_label, old_label)
+
+    canonical_citations.sort(
+        key=lambda c: int(c['label'][1:-1]) if c.get('label', '')[1:-1].isdigit() else 9999
+    )
+
+    result = dict(response)
+    result['answer'] = updated_answer
+    result['citations'] = canonical_citations
+    return result
+
+
 class State(TypedDict):
     input: str
     query: str
@@ -620,8 +709,8 @@ def update_chat_summary(chat_id: int, new_messages: list):
 
 def store_system_message(state: State):
     t1 = time.time()
-    
-    response = state['response']
+
+    response = _deduplicate_and_renumber_citations(response=state['response'])
     answer = response['answer']
     user_message = state['message']
     answer_language = state['answer_language']

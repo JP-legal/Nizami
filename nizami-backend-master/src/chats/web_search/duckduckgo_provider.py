@@ -5,7 +5,7 @@ Uses the unofficial DuckDuckGo search library — no API key required,
 completely free. Results include title, URL, and a text snippet.
 
 Requires:
-    pip install duckduckgo-search
+    pip install ddgs
 """
 from __future__ import annotations
 
@@ -31,11 +31,11 @@ class DuckDuckGoProvider(WebSearchProvider):
         safesearch: str = "moderate",
     ) -> None:
         try:
-            from duckduckgo_search import DDGS  # type: ignore[import]
+            from ddgs import DDGS  # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
-                "duckduckgo-search is required for DuckDuckGoProvider. "
-                "Install it with: pip install duckduckgo-search"
+                "ddgs is required for DuckDuckGoProvider. "
+                "Install it with: pip install ddgs"
             ) from exc
 
         self._DDGS = DDGS
@@ -53,23 +53,22 @@ class DuckDuckGoProvider(WebSearchProvider):
         Returns:
             List of WebSearchResult ordered by DuckDuckGo's relevance.
         """
-        results: list[WebSearchResult] = []
+        raw = self._DDGS().text(
+            query,
+            region=self._region,
+            safesearch=self._safesearch,
+            max_results=num_results,
+        )
 
-        with self._DDGS() as ddgs:
-            for item in ddgs.text(
-                query,
-                region=self._region,
-                safesearch=self._safesearch,
-                max_results=num_results,
-            ):
-                results.append(
-                    WebSearchResult(
-                        title=item.get("title", ""),
-                        url=item.get("href", ""),
-                        content=item.get("body", ""),
-                        score=None,  # DDG does not expose a relevance score
-                    )
-                )
+        results = [
+            WebSearchResult(
+                title=item.get("title", ""),
+                url=item.get("href", ""),
+                content=item.get("body", ""),
+                score=None,  # DDG does not expose a relevance score
+            )
+            for item in (raw or [])
+        ]
 
         logger.debug(
             "DuckDuckGoProvider returned %d results for query: %s",
