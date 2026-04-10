@@ -25,6 +25,7 @@ from typing import Optional
 
 from langchain_core.documents import Document
 
+from src.chats.retrieval.reranker import DocumentReranker
 from src.chats.web_search.base import WebSearchResult
 from src.chats.web_search.service import WebSearchService
 
@@ -60,10 +61,17 @@ class RetrievalOrchestrator:
     Args:
         web_search_service: An initialised WebSearchService, or None to skip
                             web search entirely.
+        reranker:           A DocumentReranker to apply after deduplication,
+                            or None to skip reranking (returns all deduped docs).
     """
 
-    def __init__(self, web_search_service: Optional[WebSearchService] = None) -> None:
+    def __init__(
+        self,
+        web_search_service: Optional[WebSearchService] = None,
+        reranker: Optional[DocumentReranker] = None,
+    ) -> None:
         self.web_search_service = web_search_service
+        self.reranker = reranker
 
     # ------------------------------------------------------------------
     # Public interface
@@ -171,11 +179,22 @@ class RetrievalOrchestrator:
         logger.info("RAG branch started | query=%s", query[:80])
 
         # Apply hnsw.ef_search on this thread's DB connection.
-        self._set_hnsw_ef_search()
+        # ef_search must exceed the number of candidates we actually want;
+        # use retriever.k (broad fetch size) as the floor.
+        k = getattr(retriever, 'k', 15)
+        self._set_hnsw_ef_search(k)
 
         docs_original = retriever.invoke(query)
         docs_translated = retriever.invoke(translated_query)
         docs = self._dedupe_by_chunk_id(docs_original + docs_translated)
+
+        logger.info("RAG after dedup: %d candidate chunks", len(docs))
+
+        if self.reranker is not None and docs:
+            # Use the English translation for reranking: Flashrank's cross-encoder
+            # is English-trained and scores Arabic/non-English text poorly against
+            # a non-English query.
+            docs = self.reranker.rerank(translated_query, docs)
 
         elapsed = time.monotonic() - t_start
         return docs, elapsed
@@ -189,16 +208,21 @@ class RetrievalOrchestrator:
         return results, elapsed
 
     @staticmethod
-    def _set_hnsw_ef_search() -> None:
+    def _set_hnsw_ef_search(k: int = 15) -> None:
         """
         Apply the hnsw.ef_search session variable on the current thread's
         Django database connection.
+
+        ef_search controls HNSW recall; it should be comfortably larger than
+        the number of candidates requested (k). We use max(k * 3, 64) as a
+        reasonable floor that avoids recall degradation at higher k values.
         """
+        ef = max(k * 3, 64)
         try:
             from django.db import connection
 
             with connection.cursor() as cursor:
-                cursor.execute("SET LOCAL hnsw.ef_search = 32;")
+                cursor.execute(f"SET LOCAL hnsw.ef_search = {ef};")
         except Exception:
             logger.warning("Could not set hnsw.ef_search", exc_info=True)
 

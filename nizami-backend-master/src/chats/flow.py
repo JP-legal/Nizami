@@ -760,26 +760,21 @@ def extract_url_content(state: State):
     Detect URLs in the user's message, fetch their content, and store it in
     state so answer_legal_question can inject it into the LLM prompt.
 
-    Up to 3 URLs are fetched concurrently. If none are found or all fetches
-    fail the node returns an empty string and the rest of the flow is unaffected.
+    Up to 3 URLs are fetched concurrently via asyncio. If none are found or
+    all fetches fail the node returns an empty string and the rest of the
+    flow is unaffected.
     """
-    logger = logging.getLogger(__name__)
-    import concurrent.futures as _cf
-    from src.chats.web_search.url_extractor import fetch_url_content
+    import asyncio
+    from src.chats.web_search.url_extractor import fetch_urls
 
+    logger = logging.getLogger(__name__)
     input_text = state.get('input', '')
     urls = list(dict.fromkeys(_URL_RE.findall(input_text)))[:3]  # dedupe, cap at 3
 
     if not urls:
         return {'url_context': ''}
 
-    results = []
-    with _cf.ThreadPoolExecutor(max_workers=len(urls)) as executor:
-        futures = {executor.submit(fetch_url_content, url): url for url in urls}
-        for future in _cf.as_completed(futures):
-            result = future.result()
-            if result:
-                results.append(result)
+    results = asyncio.run(fetch_urls(urls))
 
     if not results:
         logger.warning("extract_url_content: all URL fetches failed for input: %s", input_text[:120])
@@ -841,17 +836,23 @@ def answer_legal_question(state: State):
 
     llm = create_legal_advice_llm()
     template = get_prompt_value_by_name(PromptType.LEGAL_ADVICE)
-    retriever = FilteredRetriever(ids, k=8, logger=logger)
+    # Retrieve broadly so the reranker has enough candidates to work with.
+    # The reranker will trim this down to ~6 high-quality chunks before the LLM.
+    RETRIEVE_K = 15
+    RERANK_TOP_N = 6
+    retriever = FilteredRetriever(ids, k=RETRIEVE_K, logger=logger)
 
     if RAG_SOURCE == 'new':
         search_kwargs = {
-            'k': 10,
+            'k': RETRIEVE_K,
+            'rerank_top_n': RERANK_TOP_N,
             'source': 'RagSourceDocumentChunk',
             'filter': {'rag_source_document_id': {'$in': ids}},
         }
     else:
         search_kwargs = {
-            'k': 8,
+            'k': RETRIEVE_K,
+            'rerank_top_n': RERANK_TOP_N,
             'source': 'langchain_pg_embedding',
             'filter': {'reference_document_id': {'$in': ids}},
         }
@@ -913,10 +914,12 @@ def answer_legal_question(state: State):
     # 3. Run RAG retrieval + web search in parallel
     # ------------------------------------------------------------------
     from src.chats.retrieval.orchestrator import RetrievalOrchestrator
+    from src.chats.retrieval.reranker import get_reranker
     from src.chats.web_search.service import get_web_search_service
 
     web_service = get_web_search_service()
-    orchestrator = RetrievalOrchestrator(web_search_service=web_service)
+    reranker = get_reranker(top_n=RERANK_TOP_N)
+    orchestrator = RetrievalOrchestrator(web_search_service=web_service, reranker=reranker)
 
     logger.info(
         "answer_legal_question: starting parallel retrieval | "

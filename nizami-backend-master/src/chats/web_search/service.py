@@ -64,12 +64,16 @@ class WebSearchService:
         t_start = time.monotonic()
         logger.info("Web search starting | query=%s", query[:120])
 
+        # Do NOT use ThreadPoolExecutor as a context manager here.
+        # The `with` form calls shutdown(wait=True) on exit, which blocks
+        # until the background thread finishes — meaning a timeout on
+        # future.result() would still wait for the full search to complete
+        # before the except clause runs.  shutdown(wait=False) lets the
+        # thread finish on its own without blocking the caller.
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    self.provider.search, query, self.num_results
-                )
-                results = future.result(timeout=self.timeout_sec)
+            future = executor.submit(self.provider.search, query, self.num_results)
+            results = future.result(timeout=self.timeout_sec)
 
             elapsed = time.monotonic() - t_start
             logger.info(
@@ -98,6 +102,9 @@ class WebSearchService:
                 exc_info=True,
             )
             return []
+
+        finally:
+            executor.shutdown(wait=False)
 
 
 def build_web_search_service() -> Optional[WebSearchService]:
