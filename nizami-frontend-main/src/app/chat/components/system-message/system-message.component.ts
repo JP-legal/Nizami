@@ -30,6 +30,7 @@ export class SystemMessageComponent {
   message = input.required<MessageModel>();
   showCursor = signal(false);
   isLast = input<boolean>(false);
+  activeCitation = signal<number | null>(null);
 
   constructor(
     public elementRef: ElementRef,
@@ -42,8 +43,23 @@ export class SystemMessageComponent {
     return this.isTypingService.value;
   }
 
-  get text() {
-    return marked(this.message().text.trim(), {async: false});
+  get text(): string {
+    const html = marked(this.message().text.trim(), {async: false}) as string;
+    if (!this.hasAnswerMetadata()) return html;
+    // Wrap inline citation markers like [8] with a clickable button so the
+    // user can tap them to expand the matching entry in the metadata panel.
+    return html.replace(/\[(\d+)\]/g, '<button class="cite-ref" data-ref="$1">[$1]</button>');
+  }
+
+  onAnswerClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('cite-ref')) {
+      const ref = parseInt(target.getAttribute('data-ref') ?? '', 10);
+      if (!isNaN(ref)) {
+        // Toggle: clicking the same ref again closes the panel entry.
+        this.activeCitation.set(this.activeCitation() === ref ? null : ref);
+      }
+    }
   }
 
   hasAnswerMetadata(): boolean {
