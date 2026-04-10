@@ -236,7 +236,7 @@ def noop_reverse(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("prompts", "0004_update_legal_advice_prompt_rich_metadata"),
+        ("prompts", "0008_update_updating_file_from_previous_messages_prompt"),
     ]
 
     operations = [
