@@ -37,6 +37,4 @@ COPY . /app
 
 EXPOSE 8000
 
-STOPSIGNAL SIGINT
-
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "src.wsgi:application"]

@@ -8,6 +8,6 @@ import environ
 
 def load_env():
     base_dir = Path(__file__).resolve().parent.parent.parent  # Adjust as needed
-    env_path = os.path.join(base_dir, '.env')
-    _ = environ.Env()
-    environ.Env.read_env(env_path)
+    env_path = Path(os.path.join(base_dir, '.env'))
+    if env_path.exists():
+        environ.Env.read_env(str(env_path))

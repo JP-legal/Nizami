@@ -1,9 +1,10 @@
 bind = "0.0.0.0:8000"
-workers = 3
+workers = 1
 worker_class = "gthread"
-threads = 2
+threads = 4
 timeout = 180          # must exceed ALB idle_timeout (120s)
 keepalive = 5
+preload_app = True     # load Django app once in master; workers inherit via fork (faster startup, lower memory)
 accesslog = "-"        # stdout → CloudWatch
 errorlog = "-"         # stdout → CloudWatch
 loglevel = "info"
