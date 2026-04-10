@@ -6,7 +6,6 @@ import os
 import traceback
 import uuid
 
-from opentelemetry import trace
 import logger_util
 
 
@@ -70,9 +69,8 @@ def fail_test_task():
 @async_task
 def simple_test_celery(x, y, raise_error=False):
     try:
-        logger.info(json.dumps(dict(msg=f'Test from celery async task', x=x, y=y), default=str))
-        j = x / y
+        logger.info(json.dumps(dict(msg='Test from celery async task', x=x, y=y), default=str))
     except Exception as ex:
-        logger.exception(json.dumps(dict(msg=f'Error from celery', error=str(ex)), default=str))
+        logger.exception(json.dumps(dict(msg='Error from celery', error=str(ex)), default=str))
         if raise_error:
             raise ex
