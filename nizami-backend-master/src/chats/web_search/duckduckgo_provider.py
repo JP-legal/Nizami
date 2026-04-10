@@ -15,6 +15,11 @@ from .base import WebSearchProvider, WebSearchResult
 
 logger = logging.getLogger(__name__)
 
+# The ddgs library logs individual engine failures at INFO level internally
+# (e.g. Wikipedia ConnectError). Silence them so they don't pollute app logs;
+# real failures that bubble up are caught in DuckDuckGoProvider.search().
+logging.getLogger("ddgs").setLevel(logging.WARNING)
+
 
 class DuckDuckGoProvider(WebSearchProvider):
     """
@@ -53,12 +58,16 @@ class DuckDuckGoProvider(WebSearchProvider):
         Returns:
             List of WebSearchResult ordered by DuckDuckGo's relevance.
         """
-        raw = self._DDGS().text(
-            query,
-            region=self._region,
-            safesearch=self._safesearch,
-            max_results=num_results,
-        )
+        try:
+            raw = self._DDGS().text(
+                query,
+                region=self._region,
+                safesearch=self._safesearch,
+                max_results=num_results,
+            )
+        except Exception as exc:
+            logger.warning("DuckDuckGo search failed for query %r: %s", query[:80], exc)
+            return []
 
         results = [
             WebSearchResult(
