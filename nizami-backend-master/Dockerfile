@@ -20,9 +20,7 @@ RUN apt-get update && \
     fonts-liberation && \
     rm -rf /var/lib/apt/lists/*
 
-# Python 3.12+ does not ship pkg_resources; django-q needs it. Install setuptools before any app deps.
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "setuptools==82.0.1"
+RUN pip install --no-cache-dir --upgrade pip
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt

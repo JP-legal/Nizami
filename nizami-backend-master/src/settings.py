@@ -388,7 +388,7 @@ RAG_SOURCE = env('RAG_SOURCE', default='old')
 #   WEB_SEARCH_TIMEOUT_SEC  — hard deadline for the web search branch (default 10)
 #   WEB_SEARCH_NUM_RESULTS  — how many web results to pass to the LLM (default 5)
 # ---------------------------------------------------------------------------
-WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=True)
+WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=False)
 WEB_SEARCH_PROVIDER = env('WEB_SEARCH_PROVIDER', default='duckduckgo')
 TAVILY_API_KEY = env('TAVILY_API_KEY', default='') if not TESTING else ''
 WEB_SEARCH_TIMEOUT_SEC = env.float('WEB_SEARCH_TIMEOUT_SEC', default=10.0)
