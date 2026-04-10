@@ -47,10 +47,23 @@ jobs:
             echo "IMAGE_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
           fi
 
+      - name: Validate AWS configuration (secrets & variables)
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${{ secrets.AWS_ROLE_ARN_STAGING }}" ] && missing+=("secret AWS_ROLE_ARN_STAGING")
+          [ -z "${{ vars.AWS_REGION }}" ] && missing+=("variable AWS_REGION")
+          [ -z "${{ vars.ECR_BACKEND_REPO }}" ] && missing+=("variable ECR_BACKEND_REPO")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing: ${missing[*]}. Add under repo Settings → Secrets and variables → Actions, or under the stage environment if you scope secrets there. Staging needs the same OIDC provider in AWS as production; create a role trusted for refs/heads/staging. See nizami-backend-master/docs/AWS_PRODUCTION_DEPLOY.md."
+            exit 1
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING }}
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
 
       - name: Login to ECR
         run: |

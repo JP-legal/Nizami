@@ -2,10 +2,10 @@
   "family": "nizami-djangoq",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/nizami-ecs-task-role",
+  "cpu": "256",
+  "memory": "512",
+  "taskRoleArn": "arn:aws:iam::189523310609:role/nizami-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::189523310609:role/service-role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "djangoq",
@@ -13,52 +13,46 @@
       "essential": true,
       "command": ["python", "manage.py", "qcluster"],
       "environment": [
+        { "name": "DEBUG", "value": "False" },
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_NAME", "value": "nizami_db" },
+        { "name": "DB_USER", "value": "nizami_user" },
+        { "name": "DJANGO_SETTINGS_MODULE", "value": "src.settings" },
+        { "name": "AWS_REGION", "value": "eu-west-1" },
         { "name": "DEBUG",                               "value": "False" },
-        { "name": "RAG_SOURCE",                          "value": "old" },
+        { "name": "RAG_SOURCE",                          "value": "new" },
         { "name": "USE_OPENAI_FOR_EXTRACTION",           "value": "True" },
         { "name": "ATTACHMENT_EXTRACTION_WAIT_TIMEOUT_SEC", "value": "60" },
         { "name": "ATTACHMENT_EXTRACTION_POLL_INTERVAL_SEC", "value": "0.5" },
-        { "name": "AWS_S3_REGION_NAME",                  "value": "${AWS_REGION}" },
-        { "name": "AWS_DEFAULT_REGION",                  "value": "${AWS_REGION}" },
-        { "name": "RAG_S3_REGION",                       "value": "${AWS_REGION}" },
+        { "name": "AWS_S3_REGION_NAME",                  "value": "eu-west-1" },
+        { "name": "AWS_DEFAULT_REGION",                  "value": "eu-west-1" },
+        { "name": "RAG_S3_REGION",                       "value": "eu-west-1" },
         { "name": "USE_LOCALSTACK_S3",                   "value": "False" },
-        { "name": "EMAIL_PORT",                          "value": "587" },
         { "name": "EMAIL_USE_TLS",                       "value": "True" },
-        { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com" },
-        { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" },
-        { "name": "FRONTEND_RESET_PASSWORD_TEMPLATE",    "value": "/reset-password" }
+        { "name": "EMAIL_HOST",                          "value": "smtp.mailgun.org" },
+        { "name": "EMAIL_HOST_USER",                     "value": "hello@nizami.ai" },
+        { "name": "EMAIL_FROM_ADDRESS",                  "value": "hello@nizami.ai" },
+        { "name": "MOYASAR_URL",                         "value": "https://api.moyasar.com/v1/" },
+        { "name": "AWS_STORAGE_BUCKET_NAME",                 "value": "nizami-users-input-documents-bucket-eu" },
+        { "name": "RAG_S3_BUCKET",                       "value": "nizami-clean-eu" },
+        { "name": "RAG_S3_PREFIX",                        "value": "processed/" },
+        { "name": "FRONTEND_DOMAIN",                     "value": "https://app.nizami.ai" }
       ],
       "secrets": [
-        { "name": "SECRET_KEY",             "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-django:SECRET_KEY::" },
-
-        { "name": "DB_DATABASE",            "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_DATABASE::" },
-        { "name": "DB_USERNAME",            "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_USERNAME::" },
-        { "name": "DB_PASSWORD",            "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PASSWORD::" },
-        { "name": "DB_HOST",                "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_HOST::" },
-        { "name": "DB_PORT",                "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-db-creds:DB_PORT::" },
-
-        { "name": "OPENAI_API_KEY",         "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-openai:OPENAI_API_KEY::" },
-
-        { "name": "AWS_ACCESS_KEY_ID",      "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-aws-s3:AWS_ACCESS_KEY_ID::" },
-        { "name": "AWS_SECRET_ACCESS_KEY",  "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-aws-s3:AWS_SECRET_ACCESS_KEY::" },
-        { "name": "AWS_STORAGE_BUCKET_NAME","valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-aws-s3:AWS_STORAGE_BUCKET_NAME::" },
-
-        { "name": "RAG_S3_BUCKET",          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-rag-s3:RAG_S3_BUCKET::" },
-        { "name": "RAG_S3_PREFIX",          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-rag-s3:RAG_S3_PREFIX::" },
-
-        { "name": "EMAIL_HOST",             "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-email:EMAIL_HOST::" },
-        { "name": "EMAIL_HOST_USER",        "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-email:EMAIL_HOST_USER::" },
-        { "name": "EMAIL_HOST_PASSWORD",    "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-email:EMAIL_HOST_PASSWORD::" },
-        { "name": "EMAIL_FROM_ADDRESS",     "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-email:EMAIL_FROM_ADDRESS::" },
-
-        { "name": "MOYASAR_SECRET_KEY",         "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-moyasar:MOYASAR_SECRET_KEY::" },
-        { "name": "MOYASAR_WEBHOOK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${ACCOUNT_ID}:secret:nizami-prod-moyasar:MOYASAR_WEBHOOK_SECRET_KEY::" }
+        { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/SECRET_KEY-DwTz5S" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_PASSWORD-esr0g9" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/REDIS_URL-LBJxkG" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/OPENAI_API_KEY-5uiJO8" },
+        { "name": "MOYASAR_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_SECRET_KEY-CU3aaM" },
+        { "name": "MOYASAR_WEBHOOK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/MOYASAR_WEBHOOK_SECRET_KEY-73KdLP" },
+        { "name": "EMAIL_HOST_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/EMAIL_HOST_PASSWORD-rqvXaa" },
+        { "name": "DB_HOST", "valueFrom": "arn:aws:secretsmanager:eu-west-1:189523310609:secret:nizami/prod/DB_HOST-dAqBRm" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/nizami/djangoq",
-          "awslogs-region": "${AWS_REGION}",
+          "awslogs-region": "eu-west-1",
           "awslogs-stream-prefix": "djangoq"
         }
       }

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import boto3
+from botocore.config import Config
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
@@ -95,7 +96,20 @@ class Command(BaseCommand):
             logger.error("Bucket name is required (use --bucket or RAG_S3_BUCKET env var).")
             return
 
-        s3_client = boto3.client("s3")
+        region = (
+            getattr(settings, "AWS_S3_REGION_NAME", None)
+            or getattr(settings, "RAG_S3_REGION", None)
+            or getattr(settings, "AWS_DEFAULT_REGION", None)
+            or os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or "eu-west-1"
+        )
+        # Explicit region + SigV4; avoids SignatureDoesNotMatch when AWS_DEFAULT_REGION is wrong or unset.
+        s3_client = boto3.client(
+            "s3",
+            region_name=region,
+            config=Config(signature_version="s3v4"),
+        )
 
         logger.info("Scanning bucket=%r prefix=%r for JSON files...", bucket, prefix)
 

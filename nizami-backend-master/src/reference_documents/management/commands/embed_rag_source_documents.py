@@ -1,11 +1,12 @@
 import json
 import logging
 import re
+import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
-
+import unicodedata
 from hijri_converter import Hijri
 
 import boto3
@@ -22,6 +23,89 @@ logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
+
+
+def _safe_for_log(value: Any) -> str:
+    """Return an ASCII-safe string for logs in ASCII-only runtimes."""
+    try:
+        text = str(value)
+    except Exception:
+        text = repr(value)
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _debug_print(*, message: str) -> None:
+    payload = (message + "\n").encode("ascii", "backslashreplace")
+    sys.stdout.buffer.write(payload)
+    sys.stdout.flush()
+
+
+def _non_ascii_probe(*, label: str, text: str, sample_size: int = 8) -> str:
+    issues = []
+    for idx, ch in enumerate(text):
+        if ord(ch) > 127:
+            issues.append(f"{idx}:{hex(ord(ch))}:{unicodedata.name(ch, 'UNKNOWN')}")
+            if len(issues) >= sample_size:
+                break
+    return f"{label} len={len(text)} non_ascii_samples={issues if issues else 'none'}"
+
+
+_QUOTE_MAP = str.maketrans(
+    {
+        "\u2018": "'",   # '  LEFT SINGLE QUOTATION MARK
+        "\u2019": "'",   # '  RIGHT SINGLE QUOTATION MARK
+        "\u201a": "'",   # ‚  SINGLE LOW-9 QUOTATION MARK
+        "\u201b": "'",   # ‛  SINGLE HIGH-REVERSED-9 QUOTATION MARK
+        "\u201c": '"',   # "  LEFT DOUBLE QUOTATION MARK
+        "\u201d": '"',   # "  RIGHT DOUBLE QUOTATION MARK
+        "\u201e": '"',   # „  DOUBLE LOW-9 QUOTATION MARK
+        "\u201f": '"',   # ‟  DOUBLE HIGH-REVERSED-9 QUOTATION MARK
+        "\u00ab": '"',   # «  LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+        "\u00bb": '"',   # »  RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+        "\u2039": "'",   # ‹  SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+        "\u203a": "'",   # ›  SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+        "\u2032": "'",   # ′  PRIME
+        "\u2033": '"',   # ″  DOUBLE PRIME
+        "\u2014": "-",   # —  EM DASH
+        "\u2013": "-",   # –  EN DASH
+        "\u2026": "...", # …  HORIZONTAL ELLIPSIS
+        "\u00a0": " ",   # NBSP
+    }
+)
+
+
+# Regex that matches every fancy/curly quote variant that causes ASCII-encoding
+# failures in the embedding API, regardless of whether translate() caught them.
+_FANCY_SINGLE_QUOTES_RE = re.compile(
+    r"[\u2018\u2019\u201a\u201b\u2039\u203a\u2032]"
+)
+_FANCY_DOUBLE_QUOTES_RE = re.compile(
+    r"[\u201c\u201d\u201e\u201f\u00ab\u00bb\u2033]"
+)
+
+
+def _clean_text_for_embedding(*, text: str) -> str:
+    """Normalize text while preserving Arabic content before embedding."""
+    cleaned = unicodedata.normalize("NFC", text)
+    cleaned = cleaned.translate(_QUOTE_MAP)
+    # Remove invisible/control chars except newlines/tabs.
+    cleaned = "".join(ch for ch in cleaned if ch in "\n\r\t" or unicodedata.category(ch)[0] != "C")
+    # Belt-and-suspenders: regex pass guarantees no fancy quote survives even
+    # if translate() or the Pi/Pf loop missed one (e.g. in non-standard locales).
+    cleaned = _FANCY_SINGLE_QUOTES_RE.sub("'", cleaned)
+    cleaned = _FANCY_DOUBLE_QUOTES_RE.sub('"', cleaned)
+    return cleaned
+
+
+def _sanitize_payload_strings(value: Any) -> Any:
+    """Recursively replace smart quotes in incoming payload strings."""
+    if isinstance(value, str):
+        return value.translate(_QUOTE_MAP)
+    if isinstance(value, list):
+        return [_sanitize_payload_strings(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_payload_strings(v) for k, v in value.items()}
+    return value
 
 
 class Command(BaseCommand):
@@ -158,9 +242,11 @@ class Command(BaseCommand):
 
         def worker(doc_id: int) -> bool:
             logger.info("Starting worker for doc_id=%s", doc_id)
+            print(f"[embed-debug] worker_start doc_id={doc_id}")
             close_old_connections()
             try:
                 doc = RagSourceDocument.objects.get(id=doc_id)
+                print(f"[embed-debug] doc_loaded doc_id={doc_id} s3_bucket={doc.s3_bucket} s3_key={doc.s3_key}")
                 s3_client = boto3.client("s3")
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=CHUNK_SIZE,
@@ -170,7 +256,13 @@ class Command(BaseCommand):
                 logger.info("Finished embedding doc_id=%s", doc_id)
                 return True
             except Exception as exc:
-                logger.error("Failed to embed doc id=%s: %s", doc_id, exc)
+                print(f"[embed-debug] worker_error doc_id={doc_id} type={exc.__class__.__name__} detail={_safe_for_log(exc)}")
+                logger.error(
+                    "Failed to embed doc id=%s: %s (%s)",
+                    doc_id,
+                    exc.__class__.__name__,
+                    _safe_for_log(exc),
+                )
                 return False
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -203,29 +295,43 @@ class Command(BaseCommand):
             raise ValueError("s3_key is empty")
 
         body = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)["Body"].read()
+        _debug_print(message=f"[embed-debug] s3_read_ok doc_id={doc.id} bytes={len(body)}")
         payload = json.loads(body)
+        payload = _sanitize_payload_strings(payload)
+        _debug_print(message=f"[embed-debug] json_load_ok doc_id={doc.id} keys={list(payload.keys())[:10]}")
 
         clean_text = payload.get("clean_text")
         if not isinstance(clean_text, str) or not clean_text.strip():
             raise ValueError("missing or empty clean_text")
+        _debug_print(message=f"[embed-debug] {_non_ascii_probe(label='clean_text_raw', text=clean_text)}")
+        clean_text = _clean_text_for_embedding(text=clean_text)
+        _debug_print(message=f"[embed-debug] {_non_ascii_probe(label='clean_text_cleaned', text=clean_text)}")
 
         # ---- Extract and persist metadata columns ----
         _apply_metadata(doc, payload)
+        _debug_print(message=f"[embed-debug] metadata_applied doc_id={doc.id}")
 
         # ---- Delete old chunks if force-re-embedding ----
         RagSourceDocumentChunk.objects.filter(rag_source_document=doc).delete()
 
         # ---- Chunk ----
         chunks: List[str] = text_splitter.split_text(clean_text)
+        chunks = [_clean_text_for_embedding(text=chunk) for chunk in chunks]
         if not chunks:
             raise ValueError("text_splitter produced zero chunks")
+        _debug_print(message=f"[embed-debug] chunking_ok doc_id={doc.id} chunk_count={len(chunks)}")
+        _debug_print(message=f"[embed-debug] {_non_ascii_probe(label='chunk0', text=chunks[0])}")
 
         # ---- Embed chunks in batches ----
         all_embeddings: List[List[float]] = []
         for i in range(0, len(chunks), batch_size):
-            batch = chunks[i : i + batch_size]
+            # Final safety pass: re-apply cleaning so no fancy Unicode survives
+            # to the embedding API even if an upstream step missed it.
+            batch = [_clean_text_for_embedding(text=chunk) for chunk in chunks[i : i + batch_size]]
+            _debug_print(message=f"[embed-debug] embedding_batch_start doc_id={doc.id} start={i} size={len(batch)}")
             batch_embs = embeddings.embed_documents(batch)
             all_embeddings.extend(batch_embs)
+            _debug_print(message=f"[embed-debug] embedding_batch_ok doc_id={doc.id} start={i} produced={len(batch_embs)}")
 
         # ---- Bulk-create chunk rows ----
         chunk_objects = [
@@ -245,9 +351,15 @@ class Command(BaseCommand):
         # document identity (type, entity, date) not just content.
         if not doc.description:
             description_input = _build_description_input(payload, clean_text)
+            description_input = _clean_text_for_embedding(text=description_input)
+            _debug_print(message=f"[embed-debug] {_non_ascii_probe(label='description_input', text=description_input)}")
             doc.description = generate_description_for_text(description_input, "ar")
+            _debug_print(message=f"[embed-debug] description_generated doc_id={doc.id}")
+        doc.description = _clean_text_for_embedding(text=doc.description)
+        _debug_print(message=f"[embed-debug] {_non_ascii_probe(label='description_cleaned', text=doc.description)}")
 
         doc.description_embedding = embeddings.embed_query(doc.description)
+        _debug_print(message=f"[embed-debug] description_embedding_ok doc_id={doc.id}")
         doc.is_embedded = True
         doc.save(update_fields=[
             "description", "description_embedding", "is_embedded",
@@ -258,8 +370,8 @@ class Command(BaseCommand):
         ])
 
         logger.info(
-            "Embedded doc id=%s  chunks=%s  title=%r",
-            doc.id, len(chunk_objects), doc.title,
+            "Embedded doc id=%s  chunks=%s",
+            doc.id, len(chunk_objects),
         )
 
 
@@ -301,7 +413,6 @@ def _hijri_str_to_gregorian(hijri_str: str) -> Optional[date]:
 
 
 def _apply_metadata(doc: "RagSourceDocument", payload: Dict[str, Any]) -> None:
-    print(f"payload {payload}")
     """Write structured metadata fields from the S3 JSON payload onto the model instance."""
     meta: Dict[str, Any] = payload.get("metadata") or payload
 

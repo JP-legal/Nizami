@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import json
 import os
 import sys
 from datetime import timedelta
@@ -47,7 +48,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-test-key-change-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+DEBUG = env('DEBUG', False)
 # Default value is only for testing - production must set ASPOSE_LICENSE_PATH environment variable
 ASPOSE_LICENSE_PATH = env('ASPOSE_LICENSE_PATH', default='')
 
@@ -160,8 +161,8 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('DB_DATABASE'),
-            'USER': env('DB_USERNAME'),
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
             'PASSWORD': env('DB_PASSWORD'),
             'HOST': env('DB_HOST'),
             'PORT': env('DB_PORT'),
@@ -172,8 +173,8 @@ else:
         },
         'logs': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('DB_DATABASE'),
-            'USER': env('DB_USERNAME'),
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
             'PASSWORD': env('DB_PASSWORD'),
             'HOST': env('DB_HOST'),
             'PORT': env('DB_PORT'),
@@ -291,12 +292,12 @@ if TESTING:
     EMAIL_HOST_PASSWORD = ''
     EMAIL_FROM_ADDRESS = 'test@example.com'
 else:
-    EMAIL_HOST = env('EMAIL_HOST')
-    EMAIL_PORT = env('EMAIL_PORT')
-    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
-    EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
-    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS')
+    EMAIL_HOST = env('EMAIL_HOST', default='smtp.mailgun.org')
+    EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='hello@nizami.ai')
+    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS', default='hello@nizami.ai')
 # MAIL_MAILER=smtp
 
 
@@ -338,9 +339,10 @@ try:
         embeddings=embeddings,
         connection=get_db_url(),
         distance_strategy=DistanceStrategy.COSINE,
+        create_extension=False,
     )
-except Exception:
-    # If initialization fails, set to None
+except Exception as ex:
+    print(json.dumps(dict(msg='PGVector init failed', error=str(ex)), default=str))
     embeddings = None
     vectorstore = None
 
@@ -370,4 +372,3 @@ RAG_S3_REGION = env('RAG_S3_REGION', default=env('AWS_DEFAULT_REGION', default='
 # "old" = use langchain_pg_embedding (ReferenceDocument pipeline)
 # "new" = use RagSourceDocumentChunk table (S3 RAG pipeline)
 RAG_SOURCE = env('RAG_SOURCE', default='old')
-

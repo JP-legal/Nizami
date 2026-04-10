@@ -3,17 +3,40 @@
 from django.db import migrations
 from django.db.migrations import RunSQL
 
+_LANGCHAIN_TABLES_SQL = """
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS langchain_pg_collection (
+    uuid UUID NOT NULL PRIMARY KEY,
+    name character varying NOT NULL UNIQUE,
+    cmetadata json
+);
+
+CREATE TABLE IF NOT EXISTS langchain_pg_embedding (
+    id character varying NOT NULL PRIMARY KEY,
+    collection_id UUID NOT NULL REFERENCES langchain_pg_collection(uuid) ON DELETE CASCADE,
+    embedding halfvec(3072),
+    document character varying,
+    cmetadata jsonb
+);
+
+CREATE INDEX IF NOT EXISTS ix_cmetadata_gin ON langchain_pg_embedding USING gin (cmetadata jsonb_path_ops);
+"""
+
+_ALTER_EMBEDDING_SQL = """
+ALTER TABLE langchain_pg_embedding ALTER COLUMN embedding TYPE halfvec(3072);
+"""
+
 
 class Migration(migrations.Migration):
+    atomic = False  # ← still needs this
 
     dependencies = [
         ('reference_documents', '0013_alter_referencedocument_description_embedding_and_more'),
     ]
 
     operations = [
-        RunSQL(
-            sql="""
-                    ALTER TABLE langchain_pg_embedding ALTER COLUMN embedding TYPE halfvec(3072);
-                    """,
-        ),
+        RunSQL(sql=_LANGCHAIN_TABLES_SQL),
+        RunSQL(sql=_ALTER_EMBEDDING_SQL),
     ]
