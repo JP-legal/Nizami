@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       image_sha:
@@ -16,18 +19,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_REPO: ${{ vars.ECR_BACKEND_REPO }}
-  IMAGE_TAG: ""   # set at runtime by the "Set image tag" step
+  IMAGE_TAG: ""
+  EXTRA_TAG: ""
   ECS_CLUSTER: ${{ vars.ECS_CLUSTER_PROD }}
   ECS_WEB_SERVICE: ${{ vars.ECS_WEB_SERVICE || 'nizami-web-service' }}
   ECS_WEB_TASK_FAMILY: ${{ vars.ECS_WEB_TASK_FAMILY || 'nizami-web' }}
   ECS_WEB_CONTAINER: ${{ vars.ECS_WEB_CONTAINER || 'web' }}
-  # One-off migration task networking (private subnet + web security group)
   ECS_SUBNET_ID: ${{ vars.ECS_SUBNET_ID_PROD }}
   ECS_SECURITY_GROUP: ${{ vars.ECS_WEB_SG_PROD }}
 
@@ -37,25 +40,48 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # ── Image tag ────────────────────────────────────────────────────────────
-      - name: Set image tag
+      - name: Set image tags
         run: |
           set -euo pipefail
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_sha }}" ]; then
-            echo "IMAGE_TAG=${{ github.event.inputs.image_sha }}" >> "$GITHUB_ENV"
+            IMAGE_TAG="${{ github.event.inputs.image_sha }}"
           else
-            echo "IMAGE_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
+            IMAGE_TAG="${GITHUB_SHA}"
           fi
 
-      # ── AWS auth (OIDC — no long-lived keys) ─────────────────────────────────
-      - uses: aws-actions/configure-aws-credentials@v4
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            EXTRA_TAG="pr-${{ github.event.pull_request.number }}"
+          else
+            EXTRA_TAG="latest"
+          fi
+
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "EXTRA_TAG=$EXTRA_TAG" >> "$GITHUB_ENV"
+
+      - name: Validate AWS configuration
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${{ secrets.AWS_ROLE_ARN_PROD }}" ] && missing+=("secret AWS_ROLE_ARN_PROD")
+          [ -z "${{ vars.AWS_REGION }}" ] && missing+=("variable AWS_REGION")
+          [ -z "${{ vars.ECR_BACKEND_REPO }}" ] && missing+=("variable ECR_BACKEND_REPO")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
 
-      # ── Build & push backend image ───────────────────────────────────────────
       - name: Login to ECR
         run: |
           set -euo pipefail
@@ -69,6 +95,7 @@ jobs:
           docker build \
             --platform linux/amd64 \
             -t "$ECR_REPO:$IMAGE_TAG" \
+            -t "$ECR_REPO:$EXTRA_TAG" \
             -f nizami-backend-master/Dockerfile \
             nizami-backend-master
 
@@ -76,13 +103,14 @@ jobs:
         run: |
           set -euo pipefail
           docker push "$ECR_REPO:$IMAGE_TAG"
+          docker push "$ECR_REPO:$EXTRA_TAG"
 
-      # ── Render task definitions (substitute placeholders) ────────────────────
       - name: Render task definition files
         run: |
           set -euo pipefail
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           TD_DIR="nizami-backend-master/deployments/task-definitions"
+
           for file in "$TD_DIR"/*.json; do
             sed -i \
               -e "s|\${ACCOUNT_ID}|$ACCOUNT_ID|g" \
@@ -92,8 +120,8 @@ jobs:
               "$file"
           done
 
-      # ── Run database migrations (one-off ECS task) ────────────────────────────
       - name: Run database migrations
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
 
@@ -133,8 +161,8 @@ jobs:
 
           echo "Migrations completed successfully."
 
-      # ── Update web service ───────────────────────────────────────────────────
       - name: Update web task definition
+        if: github.event_name != 'pull_request'
         id: render-web
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -143,6 +171,7 @@ jobs:
           image: ${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
 
       - name: Deploy web service
+        if: github.event_name != 'pull_request'
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-web.outputs.task-definition }}
@@ -150,8 +179,8 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-      # ── Update Django Q worker service ───────────────────────────────────────
       - name: Update djangoq task definition
+        if: github.event_name != 'pull_request'
         id: render-djangoq
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -160,6 +189,7 @@ jobs:
           image: ${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
 
       - name: Deploy djangoq service
+        if: github.event_name != 'pull_request'
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-djangoq.outputs.task-definition }}
@@ -167,24 +197,34 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-      # ── Rollback web on failure ───────────────────────────────────────────────
+      - name: Update celery task definition
+        id: render-celery-extraction
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: nizami-backend-master/deployments/task-definitions/nizami-celery-extraction-task.json
+          container-name: celery-extraction
+          image: ${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+
+      - name: Deploy celery task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-celery-extraction.outputs.task-definition }}
+          service: ${{ vars.ECS_NIZAMI_CELERY_SERVICE || 'nizami-celery-service' }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
       - name: Rollback web service on failure
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           echo "Deployment failed — rolling back web service to previous task definition..."
-          PREV_TASK_DEF=$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_WEB_SERVICE" \
-            --query 'services[0].taskDefinition' \
-            --output text)
-          # ECS keeps the previous revision — decrement by 1
-          FAMILY=$(echo "$PREV_TASK_DEF" | sed 's/:[0-9]*$//')
+
           PREV_REVISION=$(aws ecs list-task-definitions \
             --family-prefix "$ECS_WEB_TASK_FAMILY" \
             --sort DESC \
             --query 'taskDefinitionArns[1]' \
             --output text)
+
           if [ "$PREV_REVISION" != "None" ] && [ -n "$PREV_REVISION" ]; then
             aws ecs update-service \
               --cluster "$ECS_CLUSTER" \

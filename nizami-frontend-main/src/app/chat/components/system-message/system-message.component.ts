@@ -10,6 +10,7 @@ import {MessagesService} from '../../services/messages.service';
 import {UntilDestroy, untilDestroyed} from '@ngneat/until-destroy';
 import {take} from 'rxjs';
 import {SafeHtmlPipe} from '../../../common/pipes/safe-html.pipe';
+import {AnswerMetadataComponent} from '../answer-metadata/answer-metadata.component';
 
 @UntilDestroy()
 @Component({
@@ -19,7 +20,8 @@ import {SafeHtmlPipe} from '../../../common/pipes/safe-html.pipe';
     ChatSystemProfileComponent,
     NgxTypedWriterComponent,
     UserMessageFileComponent,
-    SafeHtmlPipe
+    SafeHtmlPipe,
+    AnswerMetadataComponent,
   ],
   templateUrl: './system-message.component.html',
   styleUrl: './system-message.component.scss'
@@ -42,6 +44,19 @@ export class SystemMessageComponent {
 
   get text() {
     return marked(this.message().text.trim(), {async: false});
+  }
+
+  hasAnswerMetadata(): boolean {
+    const m = this.message().metadata_json;
+    if (!m) {
+      return false;
+    }
+    return (
+      (m.citations?.length ?? 0) > 0 ||
+      (m.dates_mentioned?.length ?? 0) > 0 ||
+      (m.numbers_and_percentages?.length ?? 0) > 0 ||
+      (m.statistics_from_context?.length ?? 0) > 0
+    );
   }
 
   writingDone() {

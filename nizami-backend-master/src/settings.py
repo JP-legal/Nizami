@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import json
 import os
 import sys
 from datetime import timedelta
@@ -47,7 +48,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-test-key-change-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+DEBUG = env('DEBUG', False)
 # Default value is only for testing - production must set ASPOSE_LICENSE_PATH environment variable
 ASPOSE_LICENSE_PATH = env('ASPOSE_LICENSE_PATH', default='')
 
@@ -160,8 +161,8 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('DB_DATABASE'),
-            'USER': env('DB_USERNAME'),
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
             'PASSWORD': env('DB_PASSWORD'),
             'HOST': env('DB_HOST'),
             'PORT': env('DB_PORT'),
@@ -172,8 +173,8 @@ else:
         },
         'logs': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('DB_DATABASE'),
-            'USER': env('DB_USERNAME'),
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
             'PASSWORD': env('DB_PASSWORD'),
             'HOST': env('DB_HOST'),
             'PORT': env('DB_PORT'),
@@ -291,12 +292,12 @@ if TESTING:
     EMAIL_HOST_PASSWORD = ''
     EMAIL_FROM_ADDRESS = 'test@example.com'
 else:
-    EMAIL_HOST = env('EMAIL_HOST')
-    EMAIL_PORT = env('EMAIL_PORT')
-    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
-    EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
-    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS')
+    EMAIL_HOST = env('EMAIL_HOST', default='smtp.mailgun.org')
+    EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='hello@nizami.ai')
+    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+    EMAIL_FROM_ADDRESS = env('EMAIL_FROM_ADDRESS', default='hello@nizami.ai')
 # MAIL_MAILER=smtp
 
 
@@ -338,9 +339,10 @@ try:
         embeddings=embeddings,
         connection=get_db_url(),
         distance_strategy=DistanceStrategy.COSINE,
+        create_extension=False,
     )
-except Exception:
-    # If initialization fails, set to None
+except Exception as ex:
+    print(json.dumps(dict(msg='PGVector init failed', error=str(ex)), default=str))
     embeddings = None
     vectorstore = None
 
@@ -371,3 +373,23 @@ RAG_S3_REGION = env('RAG_S3_REGION', default=env('AWS_DEFAULT_REGION', default='
 # "new" = use RagSourceDocumentChunk table (S3 RAG pipeline)
 RAG_SOURCE = env('RAG_SOURCE', default='old')
 
+# ---------------------------------------------------------------------------
+# Web Search Configuration
+# ---------------------------------------------------------------------------
+# Set WEB_SEARCH_ENABLED=true to enable live web search alongside the internal
+# RAG pipeline. Both run in parallel; if web search fails or times out the
+# answer falls back to RAG-only automatically.
+#
+# Supported providers (WEB_SEARCH_PROVIDER):
+#   "duckduckgo" — free, no API key required (default)
+#   "tavily"     — paid, better RAG-optimised results; requires TAVILY_API_KEY
+#
+# Tuning:
+#   WEB_SEARCH_TIMEOUT_SEC  — hard deadline for the web search branch (default 10)
+#   WEB_SEARCH_NUM_RESULTS  — how many web results to pass to the LLM (default 5)
+# ---------------------------------------------------------------------------
+WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=False)
+WEB_SEARCH_PROVIDER = env('WEB_SEARCH_PROVIDER', default='duckduckgo')
+TAVILY_API_KEY = env('TAVILY_API_KEY', default='') if not TESTING else ''
+WEB_SEARCH_TIMEOUT_SEC = env.float('WEB_SEARCH_TIMEOUT_SEC', default=10.0)
+WEB_SEARCH_NUM_RESULTS = env.int('WEB_SEARCH_NUM_RESULTS', default=5)

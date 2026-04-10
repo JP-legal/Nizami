@@ -1,3 +1,29 @@
+/** Structured RAG-backed fields from legal-advice JSON (see backend flow / LEGAL_ADVICE prompt). */
+export interface LegalAnswerMetadataJson {
+  citations?: Array<{
+    label?: string;
+    source_title?: string;
+    reference?: string;
+    excerpt?: string;
+  }>;
+  dates_mentioned?: Array<{
+    date_text?: string;
+    description?: string;
+    context_source_index?: number;
+  }>;
+  numbers_and_percentages?: Array<{
+    label?: string;
+    value?: string;
+    source_quote?: string;
+  }>;
+  statistics_from_context?: Array<{
+    metric?: string;
+    value?: string;
+    unit_or_period?: string;
+    source_quote?: string;
+  }>;
+}
+
 export interface MessageModel {
   id: number | null;
   uuid?: string | null;
@@ -9,6 +35,9 @@ export interface MessageModel {
   language?: string;
   show_translation_disclaimer?: boolean;
   translation_disclaimer_language?: string;
+
+  /** Citations, dates, figures from RAG (assistant messages). */
+  metadata_json?: LegalAnswerMetadataJson | null;
 
   messageFiles?: FileModel[] | null;
   message_file_ids?: number[] | null;
