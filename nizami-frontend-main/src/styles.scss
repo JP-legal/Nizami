@@ -49,6 +49,32 @@ html, body {
   @apply font-lato;
 }
 
+/* Inline citation buttons injected into [innerHTML] answer text.
+   Must be global because Angular component styles cannot pierce innerHTML. */
+.cite-ref {
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #067B43;
+  background-color: rgba(7, 153, 83, 0.12);
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  vertical-align: super;
+  position: relative;
+  top: -1px;
+  border: 1px solid rgba(7, 153, 83, 0.3);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  margin: 0 1px;
+  white-space: nowrap;
+}
+
+.cite-ref:hover {
+  background-color: rgba(7, 153, 83, 0.22);
+  transform: scale(1.05);
+}
+
 h1 {
   @apply font-poppins;
 }

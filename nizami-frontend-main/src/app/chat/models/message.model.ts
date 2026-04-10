@@ -2,7 +2,12 @@
 export interface LegalAnswerMetadataJson {
   citations?: Array<{
     label?: string;
+    context_source_index?: number;
     source_title?: string;
+    law_name?: string;
+    law_number?: string;
+    article_or_clause?: string;
+    date_text?: string;
     reference?: string;
     excerpt?: string;
   }>;

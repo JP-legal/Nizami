@@ -8,7 +8,7 @@
   <div class="flex flex-row gap-4">
     <app-chat-system-profile></app-chat-system-profile>
 
-    <div class="legal-content w-full text-sm font-normal flex items-start pt-2.5"
+    <div class="legal-content w-full text-sm font-normal flex flex-col items-start pt-2.5"
        [dir]="message().language === 'en' ? 'ltr' : 'rtl'"
     >
       @if (isLast() && isTyping()) {
@@ -25,11 +25,12 @@
           [showCursor]="showCursor()"
         ></ngx-typed-writer>
       } @else {
-        <div [innerHTML]="text | safeHtml"></div>
+        <div [innerHTML]="text | safeHtml" (click)="onAnswerClick($event)"></div>
         @if (hasAnswerMetadata()) {
           <app-answer-metadata
             [metadata]="message().metadata_json!"
             [isRtl]="message().language !== 'en'"
+            [activeCitation]="activeCitation()"
           />
         }
       }

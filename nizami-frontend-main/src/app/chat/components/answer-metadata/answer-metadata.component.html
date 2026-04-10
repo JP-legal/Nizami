@@ -1,102 +1,163 @@
 <div
-  class="answer-metadata mt-3 w-full rounded-lg border border-grey1/80 bg-grey4/30 px-3 py-2.5 text-xs leading-relaxed"
+  class="answer-metadata mt-3 w-full rounded-xl border border-grey1 bg-grey4/40 text-xs overflow-hidden"
   [ngClass]="{'text-right': isRtl(), 'text-left': !isRtl()}"
 >
+
+  <!-- ── Citations ── -->
   @if ((metadata().citations?.length ?? 0) > 0) {
-    <section class="mb-3">
-      <h3 class="mb-1.5 font-semibold text-grey2">References &amp; citations</h3>
-      <ol class="list-decimal space-y-2 ps-4" [ngClass]="{'ps-4 pe-0': !isRtl(), 'pe-4 ps-0 list-inside': isRtl()}">
+    <section class="border-b border-grey1 px-3 py-2.5">
+      <h3 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-grey5">
+        References &amp; Citations
+      </h3>
+      <div class="space-y-1.5">
         @for (c of metadata().citations!; track $index) {
-          <li class="marker:font-medium">
-            @if (c.label) {
-              <span class="font-medium text-grey2">{{ c.label }} </span>
-            }
-            @if (c.reference) {
-              <span class="text-grey2">{{ c.reference }}</span>
-            }
-            @if (c.source_title) {
-              <div class="text-[11px] text-grey3 mt-0.5">{{ c.source_title }}</div>
-            }
-            @if (c.excerpt) {
-              <blockquote class="mt-1 border-s-2 border-grey1 ps-2 text-[11px] text-grey3 italic">
-                {{ c.excerpt }}
-              </blockquote>
-            }
-          </li>
-        }
-      </ol>
-    </section>
-  }
+          <div
+            class="rounded-lg border overflow-hidden transition-colors duration-150"
+            [ngClass]="expandedCitationIndex() === $index
+              ? 'border-blue1/50 bg-indigo1/60'
+              : 'border-grey1 bg-white/50'"
+          >
+            <!-- Header row — always visible, acts as the click target -->
+            <button
+              type="button"
+              class="flex w-full items-start gap-2 px-2.5 py-2 text-start transition-colors hover:bg-blue1/5"
+              (click)="toggleCitation($index)"
+            >
+              <span class="mt-0.5 shrink-0 rounded-md bg-blue1/15 px-1.5 py-0.5 text-[10px] font-bold text-green203 min-w-[28px] text-center leading-tight">
+                {{ c.label ?? ('[' + ($index + 1) + ']') }}
+              </span>
+              <span class="flex-1 text-grey12 leading-snug font-medium min-w-0 break-words">
+                {{ c.reference }}
+              </span>
+              <span
+                class="ms-auto mt-1 shrink-0 text-grey5 text-[10px] transition-transform duration-200 inline-block"
+                [ngClass]="{'rotate-180': expandedCitationIndex() === $index}"
+              >▾</span>
+            </button>
 
-  @if ((metadata().dates_mentioned?.length ?? 0) > 0) {
-    <section class="mb-3">
-      <h3 class="mb-1.5 font-semibold text-grey2">Dates &amp; deadlines</h3>
-      <ul class="space-y-1">
-        @for (d of metadata().dates_mentioned!; track $index) {
-          <li>
-            <span class="font-medium">{{ d.date_text }}</span>
-            @if (d.description) {
-              <span class="text-grey3"> — {{ d.description }}</span>
+            <!-- Expanded detail -->
+            @if (expandedCitationIndex() === $index) {
+              <div class="border-t border-blue1/20 bg-white/40 px-2.5 pb-2.5 pt-2 space-y-1.5">
+                @if (c.source_title) {
+                  <div class="text-[11px] font-semibold text-grey12">{{ c.source_title }}</div>
+                }
+                @if (c.law_name || c.law_number) {
+                  <div class="text-[11px] text-grey8">
+                    @if (c.law_name) { <span>{{ c.law_name }}</span> }
+                    @if (c.law_number) { <span class="text-grey5"> · {{ c.law_number }}</span> }
+                  </div>
+                }
+                @if (c.article_or_clause) {
+                  <div class="text-[11px] text-grey8">{{ c.article_or_clause }}</div>
+                }
+                @if (c.date_text) {
+                  <div class="text-[10px] text-grey5">{{ c.date_text }}</div>
+                }
+                @if (c.excerpt) {
+                  <blockquote class="border-s-2 border-blue1/50 ps-2 text-[11px] text-grey8 italic leading-relaxed">
+                    "{{ c.excerpt }}"
+                  </blockquote>
+                }
+              </div>
             }
-            @if (d.context_source_index != null) {
-              <span class="text-[10px] text-grey3"> [{{ d.context_source_index }}]</span>
-            }
-          </li>
+          </div>
         }
-      </ul>
-    </section>
-  }
-
-  @if ((metadata().numbers_and_percentages?.length ?? 0) > 0) {
-    <section class="mb-3">
-      <h3 class="mb-1.5 font-semibold text-grey2">Numbers &amp; percentages</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full border-collapse border border-grey1 text-[11px]">
-          <thead>
-            <tr class="bg-grey4/50">
-              <th class="border border-grey1 px-2 py-1 text-start">Item</th>
-              <th class="border border-grey1 px-2 py-1 text-start">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of metadata().numbers_and_percentages!; track $index) {
-              <tr>
-                <td class="border border-grey1 px-2 py-1 align-top">{{ row.label }}</td>
-                <td class="border border-grey1 px-2 py-1 align-top font-medium">{{ row.value }}</td>
-              </tr>
-              @if (row.source_quote) {
-                <tr>
-                  <td class="border border-grey1 px-2 py-1 text-[10px] text-grey3 italic" colspan="2">{{ row.source_quote }}</td>
-                </tr>
-              }
-            }
-          </tbody>
-        </table>
       </div>
     </section>
   }
 
-  @if ((metadata().statistics_from_context?.length ?? 0) > 0) {
-    <section>
-      <h3 class="mb-1.5 font-semibold text-grey2">Numbers from sources (detail)</h3>
-      <ul class="space-y-2">
-        @for (s of metadata().statistics_from_context!; track $index) {
-          <li class="rounded border border-grey1/60 bg-white/60 px-2 py-1.5">
-            <div>
-              <span class="font-medium">{{ s.metric }}</span>
-              @if (s.value) {
-                <span class="ms-1 font-semibold text-grey2">{{ s.value }}</span>
-              }
-              @if (s.unit_or_period) {
-                <span class="text-grey3 text-[11px]"> ({{ s.unit_or_period }})</span>
-              }
-            </div>
-            @if (s.source_quote) {
-              <div class="mt-1 text-[10px] text-grey3 italic">{{ s.source_quote }}</div>
-            }
-          </li>
+  <!-- ── Dates & Deadlines ── -->
+  @if ((metadata().dates_mentioned?.length ?? 0) > 0) {
+    <section class="border-b border-grey1 px-3 py-2.5">
+      <h3 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-grey5">
+        Dates &amp; Deadlines
+      </h3>
+
+      <!-- Date chips — click one to expand its detail below -->
+      <div class="flex flex-wrap gap-1.5">
+        @for (d of metadata().dates_mentioned!; track $index) {
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors duration-150"
+            [ngClass]="expandedDateIndex() === $index
+              ? 'border-blue1 bg-blue1/10 text-green203'
+              : 'border-grey1 bg-white/70 text-grey12 hover:border-blue1/40 hover:text-green203'"
+            (click)="toggleDate($index)"
+          >
+            <!-- Calendar icon -->
+            <svg class="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M4 1V2H2C1.45 2 1 2.45 1 3V14C1 14.55 1.45 15 2 15H14C14.55 15 15 14.55 15 14V3C15 2.45 14.55 2 14 2H12V1H10V2H6V1H4ZM2 5H14V13H2V5ZM4 7V9H6V7H4ZM7 7V9H9V7H7ZM10 7V9H12V7H10ZM4 10V12H6V10H4ZM7 10V12H9V10H7Z"/>
+            </svg>
+            {{ d.date_text }}
+          </button>
         }
-      </ul>
+      </div>
+
+      <!-- Active date detail card -->
+      @if (activeDate(); as d) {
+        <div class="mt-2 rounded-lg border border-blue1/30 bg-indigo1/60 px-2.5 py-2">
+          <div class="font-semibold text-grey12 text-[11px]">{{ d.date_text }}</div>
+          @if (d.description) {
+            <div class="mt-0.5 text-grey8 leading-relaxed">{{ d.description }}</div>
+          }
+          @if (d.context_source_index != null) {
+            <div class="mt-1 text-[10px] text-grey5">Source: [{{ d.context_source_index }}]</div>
+          }
+        </div>
+      }
     </section>
   }
+
+  <!-- ── Numbers & Percentages ── -->
+  @if ((metadata().numbers_and_percentages?.length ?? 0) > 0) {
+    <section
+      class="px-3 py-2.5"
+      [ngClass]="(metadata().statistics_from_context?.length ?? 0) > 0 ? 'border-b border-grey1' : ''"
+    >
+      <h3 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-grey5">
+        Numbers &amp; Figures
+      </h3>
+      <div class="grid grid-cols-2 gap-1.5">
+        @for (row of metadata().numbers_and_percentages!; track $index) {
+          <div class="rounded-lg border border-grey1 bg-white/60 px-2.5 py-2">
+            <div class="text-[10px] text-grey5 leading-tight">{{ row.label }}</div>
+            <div class="font-bold text-green203 mt-0.5 text-[13px] leading-snug">{{ row.value }}</div>
+            @if (row.source_quote) {
+              <div class="mt-1 text-[10px] text-grey8 italic leading-relaxed">{{ row.source_quote }}</div>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- ── Statistics from Context ── -->
+  @if ((metadata().statistics_from_context?.length ?? 0) > 0) {
+    <section class="px-3 py-2.5">
+      <h3 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-grey5">
+        Statistics
+      </h3>
+      <div class="space-y-1.5">
+        @for (s of metadata().statistics_from_context!; track $index) {
+          <div class="flex items-start gap-2 rounded-lg border border-grey1 bg-white/60 px-2.5 py-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                <span class="text-grey12">{{ s.metric }}</span>
+                @if (s.value) {
+                  <span class="font-bold text-green203">{{ s.value }}</span>
+                }
+                @if (s.unit_or_period) {
+                  <span class="text-[10px] text-grey5">({{ s.unit_or_period }})</span>
+                }
+              </div>
+              @if (s.source_quote) {
+                <div class="mt-0.5 text-[10px] text-grey8 italic leading-relaxed">{{ s.source_quote }}</div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
 </div>
