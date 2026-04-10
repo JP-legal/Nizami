@@ -30,7 +30,6 @@ ALTER TABLE langchain_pg_embedding ALTER COLUMN embedding TYPE halfvec(3072);
 
 
 class Migration(migrations.Migration):
-    atomic = False  # ← still needs this
 
     dependencies = [
         ('reference_documents', '0013_alter_referencedocument_description_embedding_and_more'),

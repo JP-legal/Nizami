@@ -1,0 +1,102 @@
+<div
+  class="answer-metadata mt-3 w-full rounded-lg border border-grey1/80 bg-grey4/30 px-3 py-2.5 text-xs leading-relaxed"
+  [ngClass]="{'text-right': isRtl(), 'text-left': !isRtl()}"
+>
+  @if ((metadata().citations?.length ?? 0) > 0) {
+    <section class="mb-3">
+      <h3 class="mb-1.5 font-semibold text-grey2">References &amp; citations</h3>
+      <ol class="list-decimal space-y-2 ps-4" [ngClass]="{'ps-4 pe-0': !isRtl(), 'pe-4 ps-0 list-inside': isRtl()}">
+        @for (c of metadata().citations!; track $index) {
+          <li class="marker:font-medium">
+            @if (c.label) {
+              <span class="font-medium text-grey2">{{ c.label }} </span>
+            }
+            @if (c.reference) {
+              <span class="text-grey2">{{ c.reference }}</span>
+            }
+            @if (c.source_title) {
+              <div class="text-[11px] text-grey3 mt-0.5">{{ c.source_title }}</div>
+            }
+            @if (c.excerpt) {
+              <blockquote class="mt-1 border-s-2 border-grey1 ps-2 text-[11px] text-grey3 italic">
+                {{ c.excerpt }}
+              </blockquote>
+            }
+          </li>
+        }
+      </ol>
+    </section>
+  }
+
+  @if ((metadata().dates_mentioned?.length ?? 0) > 0) {
+    <section class="mb-3">
+      <h3 class="mb-1.5 font-semibold text-grey2">Dates &amp; deadlines</h3>
+      <ul class="space-y-1">
+        @for (d of metadata().dates_mentioned!; track $index) {
+          <li>
+            <span class="font-medium">{{ d.date_text }}</span>
+            @if (d.description) {
+              <span class="text-grey3"> — {{ d.description }}</span>
+            }
+            @if (d.context_source_index != null) {
+              <span class="text-[10px] text-grey3"> [{{ d.context_source_index }}]</span>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  @if ((metadata().numbers_and_percentages?.length ?? 0) > 0) {
+    <section class="mb-3">
+      <h3 class="mb-1.5 font-semibold text-grey2">Numbers &amp; percentages</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border border-grey1 text-[11px]">
+          <thead>
+            <tr class="bg-grey4/50">
+              <th class="border border-grey1 px-2 py-1 text-start">Item</th>
+              <th class="border border-grey1 px-2 py-1 text-start">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of metadata().numbers_and_percentages!; track $index) {
+              <tr>
+                <td class="border border-grey1 px-2 py-1 align-top">{{ row.label }}</td>
+                <td class="border border-grey1 px-2 py-1 align-top font-medium">{{ row.value }}</td>
+              </tr>
+              @if (row.source_quote) {
+                <tr>
+                  <td class="border border-grey1 px-2 py-1 text-[10px] text-grey3 italic" colspan="2">{{ row.source_quote }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if ((metadata().statistics_from_context?.length ?? 0) > 0) {
+    <section>
+      <h3 class="mb-1.5 font-semibold text-grey2">Numbers from sources (detail)</h3>
+      <ul class="space-y-2">
+        @for (s of metadata().statistics_from_context!; track $index) {
+          <li class="rounded border border-grey1/60 bg-white/60 px-2 py-1.5">
+            <div>
+              <span class="font-medium">{{ s.metric }}</span>
+              @if (s.value) {
+                <span class="ms-1 font-semibold text-grey2">{{ s.value }}</span>
+              }
+              @if (s.unit_or_period) {
+                <span class="text-grey3 text-[11px]"> ({{ s.unit_or_period }})</span>
+              }
+            </div>
+            @if (s.source_quote) {
+              <div class="mt-1 text-[10px] text-grey3 italic">{{ s.source_quote }}</div>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</div>
