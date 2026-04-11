@@ -25,6 +25,8 @@ from typing import Optional
 
 from langchain_core.documents import Document
 
+from django.conf import settings
+
 from src.chats.retrieval.reranker import DocumentReranker
 from src.chats.web_search.base import WebSearchResult
 from src.chats.web_search.service import WebSearchService
@@ -82,31 +84,44 @@ class RetrievalOrchestrator:
         query: str,
         translated_query: str,
         retriever,
-        web_enabled: bool = True,
+        web_enabled: Optional[bool] = None,
+        rag_fallback_threshold: int = 3,
     ) -> RetrievalResult:
         """
-        Run RAG and (optionally) web search in parallel.
+        Run RAG and web search in parallel, then decide whether to use the
+        web results based on how many RAG documents were returned.
 
-        Both futures are submitted before either result is awaited, so they
-        truly run concurrently inside the thread pool.
+        Both branches always start at the same time so there is no latency
+        penalty. After both finish, web results are discarded if RAG already
+        returned at least ``rag_fallback_threshold`` documents — keeping web
+        search as a true fallback rather than a constant cost.
 
         Args:
-            query:            The (possibly rephrased) user query in its
-                              original language.
-            translated_query: English translation of the query, used for a
-                              second retriever call that broadens coverage.
-            retriever:        A FilteredRetriever instance already configured
-                              with the relevant document IDs and k.
-            web_enabled:      Set to False to skip web search even when a
-                              service is configured (e.g. for follow-up
-                              questions that don't need fresh data).
+            query:                  The (possibly rephrased) user query in its
+                                    original language.
+            translated_query:       English translation, used for a second
+                                    retriever call that broadens coverage.
+            retriever:              A FilteredRetriever already configured with
+                                    the relevant document IDs and k.
+            web_enabled:            Override for web search. When None (default),
+                                    falls back to the ``WEB_SEARCH_ENABLED``
+                                    Django setting. Pass False to hard-disable
+                                    (e.g. for follow-up questions).
+            rag_fallback_threshold: Minimum RAG docs considered "sufficient".
+                                    Web results are dropped when RAG meets or
+                                    exceeds this number.
 
         Returns:
             A RetrievalResult with all retrieved data and timing info.
         """
         result = RetrievalResult()
 
-        run_web = web_enabled and self.web_search_service is not None
+        web_search_on = (
+            web_enabled
+            if web_enabled is not None
+            else getattr(settings, "WEB_SEARCH_ENABLED", False)
+        )
+        run_web = web_search_on and self.web_search_service is not None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             logger.info(
@@ -142,11 +157,13 @@ class RetrievalOrchestrator:
             if web_future is not None:
                 try:
                     web_results, elapsed = web_future.result()
-                    result.web_results = web_results
                     result.web_elapsed_sec = elapsed
                     result.web_success = True
+                    result.web_results = web_results
                     logger.info(
-                        "Web search finished | results=%d | elapsed=%.2fs",
+                        "Web search results used "
+                        "| rag_docs=%d | web_results=%d | elapsed=%.2fs",
+                        len(result.rag_documents),
                         len(web_results),
                         elapsed,
                     )
