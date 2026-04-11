@@ -398,7 +398,7 @@ RAG_SOURCE = env('RAG_SOURCE', default='new')
 # ---------------------------------------------------------------------------
 ENABLE_RERANKING = env.bool('ENABLE_RERANKING', default=True)
 
-WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=True)
+WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=False)
 WEB_SEARCH_PROVIDER = env('WEB_SEARCH_PROVIDER', default='duckduckgo')
 TAVILY_API_KEY = env('TAVILY_API_KEY', default='') if not TESTING else ''
 WEB_SEARCH_TIMEOUT_SEC = env.float('WEB_SEARCH_TIMEOUT_SEC', default=10.0)
