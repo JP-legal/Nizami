@@ -90,7 +90,7 @@
       </div>
     }
 
-    @if (popup.citation.article_or_clause) {
+    @if (popup.citation.article_or_clause && !isNotSpecified(popup.citation.article_or_clause)) {
       <div class="citation-popup__clause">{{ popup.citation.article_or_clause }}</div>
     }
 

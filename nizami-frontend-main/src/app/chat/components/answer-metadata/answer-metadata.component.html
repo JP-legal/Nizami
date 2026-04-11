@@ -47,7 +47,7 @@
                     @if (c.law_number) { <span class="text-grey5"> · {{ c.law_number }}</span> }
                   </div>
                 }
-                @if (c.article_or_clause) {
+                @if (c.article_or_clause && !isNotSpecified(c.article_or_clause)) {
                   <div class="text-[11px] text-grey8">{{ c.article_or_clause }}</div>
                 }
                 @if (c.date_text) {

@@ -838,7 +838,9 @@ def answer_legal_question(state: State):
     template = get_prompt_value_by_name(PromptType.LEGAL_ADVICE)
     # Retrieve broadly so the reranker has enough candidates to work with.
     # The reranker will trim this down to ~6 high-quality chunks before the LLM.
-    RETRIEVE_K = 15
+    # 25 (up from 15) gives the reranker a larger pool, improving recall for
+    # specific legal articles that may score lower on pure vector similarity.
+    RETRIEVE_K = 25
     RERANK_TOP_N = 6
     retriever = FilteredRetriever(ids, k=RETRIEVE_K, logger=logger)
 

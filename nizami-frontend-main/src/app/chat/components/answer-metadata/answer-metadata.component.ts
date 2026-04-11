@@ -48,4 +48,11 @@ export class AnswerMetadataComponent {
     if (idx === null) return null;
     return this.metadata().dates_mentioned?.[idx] ?? null;
   }
+
+  isNotSpecified(text: string | undefined | null): boolean {
+    if (!text) return true;
+    const t = text.trim();
+    if (!t) return true;
+    return t.includes('غير محدد') || t.includes('غير موجود') || t.toLowerCase().includes('not specified') || t.toLowerCase().includes('not available');
+  }
 }

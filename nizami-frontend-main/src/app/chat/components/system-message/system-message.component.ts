@@ -109,6 +109,13 @@ export class SystemMessageComponent implements OnDestroy {
     }, 120);
   }
 
+  isNotSpecified(text: string | undefined | null): boolean {
+    if (!text) return true;
+    const t = text.trim();
+    if (!t) return true;
+    return t.includes('غير محدد') || t.includes('غير موجود') || t.toLowerCase().includes('not specified') || t.toLowerCase().includes('not available');
+  }
+
   writingDone() {
     this.isTypingService.stopTyping();
   }

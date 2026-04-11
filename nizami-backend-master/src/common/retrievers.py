@@ -220,15 +220,192 @@ def find_rag_source_document_ids_by_description(text):
     return list(f['id'] for f in files)
 
 
+def _keyword_search_chunks(query_text, document_ids, k, logger=None):
+    """
+    Full-text keyword search against RagSourceDocumentChunk using PostgreSQL tsvector.
+
+    Complements vector search by exact-matching key legal terms (law names, article
+    numbers, penalty amounts) that may rank low on cosine similarity alone.
+
+    Tries the 'arabic' text-search configuration first; falls back to 'simple' if
+    the arabic config is not installed on the database.
+
+    Returns a list of Document objects ordered by ts_rank DESC, or [] on failure.
+    """
+    if not document_ids or not query_text:
+        return []
+
+    document_ids_list = list(document_ids)
+
+    for config in ('arabic', 'simple'):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        c.id,
+                        c.content,
+                        c.rag_source_document_id,
+                        c.chunk_index,
+                        d.title,
+                        ts_rank(
+                            to_tsvector(%s, c.content),
+                            plainto_tsquery(%s, %s)
+                        ) AS rank
+                    FROM reference_documents_ragsourcedocumentchunk c
+                    JOIN reference_documents_ragsourcedocument d
+                        ON d.id = c.rag_source_document_id
+                    WHERE c.rag_source_document_id = ANY(%s::bigint[])
+                      AND to_tsvector(%s, c.content) @@ plainto_tsquery(%s, %s)
+                    ORDER BY rank DESC
+                    LIMIT %s
+                    """,
+                    [config, config, query_text,
+                     document_ids_list,
+                     config, config, query_text,
+                     k],
+                )
+                rows = cursor.fetchall()
+
+            docs = []
+            for chunk_id, content, doc_id, chunk_idx, title, _rank in rows:
+                docs.append(Document(
+                    page_content=content or '',
+                    metadata={
+                        'id': str(chunk_id),
+                        'rag_source_document_id': doc_id,
+                        'chunk_index': chunk_idx,
+                        'title': title or '',
+                        'language': 'ar',
+                    },
+                ))
+
+            if logger:
+                logger.info(
+                    'keyword_search_chunks[%s] found %s chunks for query "%s..."',
+                    config, len(docs), query_text[:40],
+                )
+            return docs
+
+        except Exception as exc:
+            if logger:
+                logger.warning(
+                    'keyword_search_chunks[%s] failed: %s — %s',
+                    config, type(exc).__name__, exc,
+                )
+            # If the 'arabic' config caused the error, try 'simple'; otherwise give up.
+            if config == 'simple':
+                return []
+
+    return []
+
+
+def _expand_with_neighbors(docs, logger=None):
+    """
+    For each retrieved chunk, also fetch its immediate neighbors (chunk_index ± 1)
+    from the same rag_source_document_id.
+
+    This ensures the LLM receives both an article's title/header chunk and its
+    penalty/body chunk when they fall in adjacent 800-char windows.
+
+    Deduplicates by chunk UUID. The returned list is capped at min(len(docs)*3, 30)
+    to prevent context bloat.
+    """
+    if not docs:
+        return docs
+
+    # Build lookup of (doc_id, index) pairs we need to fetch
+    pairs = set()
+    for doc in docs:
+        doc_id = doc.metadata.get('rag_source_document_id')
+        idx = doc.metadata.get('chunk_index')
+        if doc_id is not None and idx is not None:
+            pairs.add((doc_id, idx - 1))
+            pairs.add((doc_id, idx + 1))
+
+    if not pairs:
+        return docs
+
+    # Remove pairs we already have
+    existing_ids = {doc.metadata.get('id') for doc in docs}
+    existing_pairs = {
+        (doc.metadata.get('rag_source_document_id'), doc.metadata.get('chunk_index'))
+        for doc in docs
+    }
+    pairs -= existing_pairs
+
+    if not pairs:
+        return docs
+
+    # Group pairs by doc_id for an efficient single query
+    from collections import defaultdict
+    pairs_by_doc: dict = defaultdict(list)
+    for doc_id, idx in pairs:
+        if idx >= 0:  # chunk_index is always non-negative
+            pairs_by_doc[doc_id].append(idx)
+
+    if not pairs_by_doc:
+        return docs
+
+    try:
+        neighbor_docs = []
+        with connection.cursor() as cursor:
+            for doc_id, indexes in pairs_by_doc.items():
+                cursor.execute(
+                    """
+                    SELECT c.id, c.content, c.rag_source_document_id, c.chunk_index, d.title
+                    FROM reference_documents_ragsourcedocumentchunk c
+                    JOIN reference_documents_ragsourcedocument d ON d.id = c.rag_source_document_id
+                    WHERE c.rag_source_document_id = %s
+                      AND c.chunk_index = ANY(%s::int[])
+                    """,
+                    [doc_id, indexes],
+                )
+                for chunk_id, content, rdoc_id, chunk_idx, title in cursor.fetchall():
+                    chunk_uuid = str(chunk_id)
+                    if chunk_uuid not in existing_ids:
+                        existing_ids.add(chunk_uuid)
+                        neighbor_docs.append(Document(
+                            page_content=content or '',
+                            metadata={
+                                'id': chunk_uuid,
+                                'rag_source_document_id': rdoc_id,
+                                'chunk_index': chunk_idx,
+                                'title': title or '',
+                                'language': 'ar',
+                            },
+                        ))
+
+        cap = min(len(docs) * 3, 30)
+        combined = (docs + neighbor_docs)[:cap]
+
+        if logger and neighbor_docs:
+            logger.info(
+                'expand_with_neighbors added %s neighbor chunks (total %s, cap %s)',
+                len(neighbor_docs), len(combined), cap,
+            )
+        return combined
+
+    except Exception as exc:
+        if logger:
+            logger.warning('expand_with_neighbors failed: %s', exc)
+        return docs
+
+
 class FilteredRetriever:
     """
     Custom retriever that filters similarity search by document IDs.
 
-    Uses two strategies:
+    Retrieval strategy for RAG_SOURCE="new":
+    1. Vector search: cosine-distance ranking via pgvector (primary)
+    2. Keyword search: PostgreSQL tsvector full-text search (catches exact legal terms)
+    3. Neighbor expansion: fetches chunk_index ± 1 for each result to surface
+       adjacent article-title / penalty chunks that may be in separate windows
+    4. The merged candidate list is passed to the Flashrank reranker
+
+    For RAG_SOURCE="old":
     1. SQL-based search: Filters FIRST, then searches within filtered set (preferred)
     2. Fallback search: Searches globally, then filters (less reliable)
-
-    When RAG_SOURCE="new", uses the RagSourceDocumentChunk table instead.
     """
 
     def __init__(self, document_ids, k=8, logger=None, vectorstore=None):
@@ -255,12 +432,33 @@ class FilteredRetriever:
         )
 
     def _rag_source_search(self, query_text):
-        return rag_source_similarity_search(
+        # 1. Vector search
+        vector_docs = rag_source_similarity_search(
             query_text=query_text,
             document_ids=self.document_ids,
             k=self.k,
             logger=self.logger,
+        ) or []
+
+        # 2. Keyword search — half the vector k to avoid drowning vector results
+        keyword_docs = _keyword_search_chunks(
+            query_text=query_text,
+            document_ids=self.document_ids,
+            k=max(self.k // 2, 5),
+            logger=self.logger,
         )
+
+        # 3. Merge by chunk ID (vector results have priority; keyword fills gaps)
+        seen_ids = {doc.metadata['id'] for doc in vector_docs}
+        for doc in keyword_docs:
+            if doc.metadata['id'] not in seen_ids:
+                seen_ids.add(doc.metadata['id'])
+                vector_docs.append(doc)
+
+        # 4. Expand with adjacent chunks so article headers + bodies are both present
+        expanded = _expand_with_neighbors(vector_docs, logger=self.logger)
+
+        return expanded if expanded else None
 
     def _fallback_search(self, query_text):
         if self.base_retriever is None:
