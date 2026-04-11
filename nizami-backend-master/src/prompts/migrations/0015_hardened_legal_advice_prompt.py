@@ -292,7 +292,7 @@ def noop_reverse(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("prompts", "0013_update_legal_advice_prompt_html_structure"),
+        ("prompts", "0014_hardened_legal_advice_prompt"),
     ]
 
     operations = [
