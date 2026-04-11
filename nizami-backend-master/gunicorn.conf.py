@@ -1,7 +1,7 @@
 bind = "0.0.0.0:8000"
-workers = 1
+workers = 3
 worker_class = "gthread"
-threads = 4
+threads = 3
 timeout = 180          # must exceed ALB idle_timeout (120s)
 keepalive = 5
 preload_app = True     # load Django app once in master; workers inherit via fork (faster startup, lower memory)
