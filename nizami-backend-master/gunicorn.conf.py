@@ -1,7 +1,7 @@
 bind = "0.0.0.0:8000"
-workers = 2
+workers = 1
 worker_class = "gthread"
-threads = 2            # 2 workers × 4 threads = 8 concurrent slots
+threads = 4          # 2 workers × 4 threads = 8 concurrent slots
 timeout = 300          # LLM chains can be slow; must be > ALB idle_timeout (120s) with headroom
 graceful_timeout = 120 # give in-flight requests time to finish; raise ECS stopTimeout to match if deploying long-running LLM calls
 keepalive = 5
