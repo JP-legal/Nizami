@@ -320,10 +320,12 @@ def render_pdf_html(
     messages_parts: list[str] = []
     for msg in chat:
         role = msg.get("role", "user")
-        label = user_label if role == "user" else "Assistant"
+        # Normalise DB role 'ai' → 'assistant' so CSS class .message-assistant applies.
+        css_role = "assistant" if role in ("ai", "assistant") else "user"
+        label = user_label if role == "user" else "Nizami"
         messages_parts.append(
             _CHAT_MESSAGE_TEMPLATE.format(
-                role=html.escape(role),
+                role=html.escape(css_role),
                 label=label,
                 timestamp=_fmt_timestamp(msg.get("timestamp")),
                 content=_escape_content(str(msg.get("content", ""))),

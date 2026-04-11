@@ -1,11 +1,11 @@
 bind = "0.0.0.0:8000"
-workers = 3
+workers = 2
 worker_class = "gthread"
-threads = 4            # 3 workers × 4 threads = 12 concurrent slots; sufficient for I/O-bound LLM workload within 2 GB
+threads = 4            # 2 workers × 4 threads = 8 concurrent slots
 timeout = 300          # LLM chains can be slow; must be > ALB idle_timeout (120s) with headroom
 graceful_timeout = 120 # give in-flight requests time to finish; raise ECS stopTimeout to match if deploying long-running LLM calls
 keepalive = 5
-preload_app = True     # load Django app once in master; workers inherit via fork (faster startup, lower memory)
+preload_app = False    # keep app load in workers only; avoids master holding a full model copy alongside each forked worker
 accesslog = "-"        # stdout → CloudWatch
 errorlog = "-"         # stdout → CloudWatch
 loglevel = "info"

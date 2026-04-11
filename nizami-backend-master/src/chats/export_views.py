@@ -131,17 +131,10 @@ class ExportChatView(APIView):
             except Chat.DoesNotExist:
                 return Response({"detail": "chat_id not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # ── Generate PDF ──
-        user_name = getattr(request.user, "first_name", None) or None
-        try:
-            pdf_bytes = generate_pdf_bytes(chat, summary, user_name=user_name)
-        except RuntimeError as exc:
-            logger.exception("PDF generation failed")
-            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # ── Build chat_json — enrich with citation metadata from DB when available ──
-        # When chat_id is provided we pull metadata_json from the persisted Message rows
-        # so that references remain clickable on the public share page.
+        # ── Build chat_json — enrich with all messages from DB when available ──
+        # When chat_id is provided we pull from the persisted Message rows so that
+        # both user and assistant messages are included (the frontend payload may
+        # only contain user messages) and citations remain clickable on the share page.
         if chat_obj is not None:
             from src.chats.models import Message as _Message
             db_messages = list(
@@ -160,6 +153,14 @@ class ExportChatView(APIView):
             ]
         else:
             chat_json_to_store = chat
+
+        # ── Generate PDF from the full message list ──
+        user_name = getattr(request.user, "first_name", None) or None
+        try:
+            pdf_bytes = generate_pdf_bytes(chat_json_to_store, summary, user_name=user_name)
+        except RuntimeError as exc:
+            logger.exception("PDF generation failed")
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # ── Upload to S3 ──
         export_id = uuid.uuid4()
