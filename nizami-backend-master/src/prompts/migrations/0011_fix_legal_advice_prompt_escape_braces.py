@@ -1,10 +1,10 @@
 # Clarify: every number from RAG context must appear in the main "answer", not only in JSON arrays.
-
+# treat them as template variables. Only {language} and {context} are real variables.
 from django.db import migrations
 
 from src.prompts.enums import PromptType
 
-NEW_LEGAL_ADVICE = f"""
+NEW_LEGAL_ADVICE = """
 You are a legal expert specializing exclusively in Saudi Arabian law.
 
 You MUST ALWAYS return a single valid JSON object with ALL required keys.
