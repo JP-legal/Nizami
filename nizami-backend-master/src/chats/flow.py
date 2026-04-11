@@ -916,16 +916,18 @@ def answer_legal_question(state: State):
     from src.chats.retrieval.orchestrator import RetrievalOrchestrator
     from src.chats.retrieval.reranker import get_reranker
     from src.chats.web_search.service import get_web_search_service
+    from django.conf import settings as django_settings
 
     web_service = get_web_search_service()
-    reranker = get_reranker(top_n=RERANK_TOP_N)
+    reranker = get_reranker(top_n=RERANK_TOP_N) if getattr(django_settings, 'ENABLE_RERANKING', True) else None
     orchestrator = RetrievalOrchestrator(web_search_service=web_service, reranker=reranker)
 
     logger.info(
         "answer_legal_question: starting parallel retrieval | "
-        "query=%s | web_enabled=%s",
+        "query=%s | web_enabled=%s | reranking=%s",
         query[:80],
         web_service is not None,
+        reranker is not None,
     )
     retrieval = orchestrator.run(
         query=query,

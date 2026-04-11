@@ -388,6 +388,16 @@ RAG_SOURCE = env('RAG_SOURCE', default='old')
 #   WEB_SEARCH_TIMEOUT_SEC  — hard deadline for the web search branch (default 10)
 #   WEB_SEARCH_NUM_RESULTS  — how many web results to pass to the LLM (default 5)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Reranking Configuration
+# ---------------------------------------------------------------------------
+# Set ENABLE_RERANKING=false to skip the Flashrank cross-encoder reranking
+# step and pass the raw top-k vector results directly to the LLM.
+# Disabling this can improve answer quality when the reranker is filtering out
+# relevant documents, at the cost of less precise ranking.
+# ---------------------------------------------------------------------------
+ENABLE_RERANKING = env.bool('ENABLE_RERANKING', default=True)
+
 WEB_SEARCH_ENABLED = env.bool('WEB_SEARCH_ENABLED', default=False)
 WEB_SEARCH_PROVIDER = env('WEB_SEARCH_PROVIDER', default='duckduckgo')
 TAVILY_API_KEY = env('TAVILY_API_KEY', default='') if not TESTING else ''

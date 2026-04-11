@@ -1,6 +1,6 @@
-import {Component, ElementRef, input, signal} from '@angular/core';
+import {Component, ElementRef, input, OnDestroy, signal} from '@angular/core';
 import {CopyButtonComponent} from "../copy-button/copy-button.component";
-import {FileModel, MessageModel} from '../../models/message.model';
+import {FileModel, LegalAnswerMetadataJson, MessageModel} from '../../models/message.model';
 import {ChatSystemProfileComponent} from '../chat-system-profile/chat-system-profile.component';
 import {NgxTypedWriterComponent} from 'ngx-typed-writer';
 import {marked} from 'marked';
@@ -10,7 +10,12 @@ import {MessagesService} from '../../services/messages.service';
 import {UntilDestroy, untilDestroyed} from '@ngneat/until-destroy';
 import {take} from 'rxjs';
 import {SafeHtmlPipe} from '../../../common/pipes/safe-html.pipe';
-import {AnswerMetadataComponent} from '../answer-metadata/answer-metadata.component';
+
+interface CitationPopupState {
+  citation: NonNullable<LegalAnswerMetadataJson['citations']>[0];
+  top: number;
+  left: number;
+}
 
 @UntilDestroy()
 @Component({
@@ -21,16 +26,17 @@ import {AnswerMetadataComponent} from '../answer-metadata/answer-metadata.compon
     NgxTypedWriterComponent,
     UserMessageFileComponent,
     SafeHtmlPipe,
-    AnswerMetadataComponent,
   ],
   templateUrl: './system-message.component.html',
   styleUrl: './system-message.component.scss'
 })
-export class SystemMessageComponent {
+export class SystemMessageComponent implements OnDestroy {
   message = input.required<MessageModel>();
   showCursor = signal(false);
   isLast = input<boolean>(false);
-  activeCitation = signal<number | null>(null);
+  citationPopup = signal<CitationPopupState | null>(null);
+
+  private hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     public elementRef: ElementRef,
@@ -39,40 +45,68 @@ export class SystemMessageComponent {
   ) {
   }
 
+  ngOnDestroy(): void {
+    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+  }
+
   get isTyping() {
     return this.isTypingService.value;
   }
 
   get text(): string {
     const html = marked(this.message().text.trim(), {async: false}) as string;
-    if (!this.hasAnswerMetadata()) return html;
-    // Wrap inline citation markers like [8] with a clickable button so the
-    // user can tap them to expand the matching entry in the metadata panel.
+    const hasCitations = (this.message().metadata_json?.citations?.length ?? 0) > 0;
+    if (!hasCitations) return html;
     return html.replace(/\[(\d+)\]/g, '<button class="cite-ref" data-ref="$1">[$1]</button>');
   }
 
-  onAnswerClick(event: MouseEvent): void {
+  onAnswerMouseOver(event: MouseEvent): void {
     const target = event.target as HTMLElement;
-    if (target.classList.contains('cite-ref')) {
-      const ref = parseInt(target.getAttribute('data-ref') ?? '', 10);
-      if (!isNaN(ref)) {
-        // Toggle: clicking the same ref again closes the panel entry.
-        this.activeCitation.set(this.activeCitation() === ref ? null : ref);
-      }
+    if (!target.classList.contains('cite-ref')) return;
+
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+
+    const ref = parseInt(target.getAttribute('data-ref') ?? '', 10);
+    if (isNaN(ref)) return;
+
+    const citations = this.message().metadata_json?.citations ?? [];
+    const citation = citations.find(c => c.label === `[${ref}]`);
+    if (!citation) return;
+
+    const rect = target.getBoundingClientRect();
+    const tooltipWidth = 300;
+    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    if (left + tooltipWidth > window.innerWidth - 16) left = window.innerWidth - tooltipWidth - 16;
+    if (left < 16) left = 16;
+
+    this.citationPopup.set({ citation, top: rect.top, left });
+  }
+
+  onAnswerMouseLeave(event: MouseEvent): void {
+    const related = event.relatedTarget as HTMLElement | null;
+    if (related?.closest?.('.citation-popup')) return;
+    this.scheduleHide();
+  }
+
+  onPopupMouseEnter(): void {
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
     }
   }
 
-  hasAnswerMetadata(): boolean {
-    const m = this.message().metadata_json;
-    if (!m) {
-      return false;
-    }
-    return (
-      (m.citations?.length ?? 0) > 0 ||
-      (m.dates_mentioned?.length ?? 0) > 0 ||
-      (m.numbers_and_percentages?.length ?? 0) > 0 ||
-      (m.statistics_from_context?.length ?? 0) > 0
-    );
+  onPopupMouseLeave(): void {
+    this.scheduleHide();
+  }
+
+  private scheduleHide(): void {
+    this.hideTimeout = setTimeout(() => {
+      this.citationPopup.set(null);
+      this.hideTimeout = null;
+    }, 120);
   }
 
   writingDone() {

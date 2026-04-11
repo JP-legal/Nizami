@@ -25,14 +25,11 @@
           [showCursor]="showCursor()"
         ></ngx-typed-writer>
       } @else {
-        <div [innerHTML]="text | safeHtml" (click)="onAnswerClick($event)"></div>
-        @if (hasAnswerMetadata()) {
-          <app-answer-metadata
-            [metadata]="message().metadata_json!"
-            [isRtl]="message().language !== 'en'"
-            [activeCitation]="activeCitation()"
-          />
-        }
+        <div
+          [innerHTML]="text | safeHtml"
+          (mouseover)="onAnswerMouseOver($event)"
+          (mouseleave)="onAnswerMouseLeave($event)"
+        ></div>
       }
     </div>
   </div>
@@ -65,3 +62,40 @@
   </div>
 
 </div>
+
+<!-- Citation hover popup — fixed-positioned so it floats above the text -->
+@if (citationPopup(); as popup) {
+  <div
+    class="citation-popup"
+    [style.top.px]="popup.top"
+    [style.left.px]="popup.left"
+    (mouseenter)="onPopupMouseEnter()"
+    (mouseleave)="onPopupMouseLeave()"
+  >
+    <div class="citation-popup__arrow"></div>
+
+    <div class="citation-popup__header">
+      <span class="citation-popup__badge">{{ popup.citation.label }}</span>
+      @if (popup.citation.source_title) {
+        <span class="citation-popup__title">{{ popup.citation.source_title }}</span>
+      } @else if (popup.citation.reference) {
+        <span class="citation-popup__title">{{ popup.citation.reference }}</span>
+      }
+    </div>
+
+    @if (popup.citation.law_name || popup.citation.law_number) {
+      <div class="citation-popup__meta">
+        @if (popup.citation.law_name) { <span>{{ popup.citation.law_name }}</span> }
+        @if (popup.citation.law_number) { <span class="citation-popup__meta-sep"> · {{ popup.citation.law_number }}</span> }
+      </div>
+    }
+
+    @if (popup.citation.article_or_clause) {
+      <div class="citation-popup__clause">{{ popup.citation.article_or_clause }}</div>
+    }
+
+    @if (popup.citation.excerpt) {
+      <blockquote class="citation-popup__excerpt">"{{ popup.citation.excerpt }}"</blockquote>
+    }
+  </div>
+}
