@@ -402,10 +402,6 @@ class FilteredRetriever:
     3. Neighbor expansion: fetches chunk_index ± 1 for each result to surface
        adjacent article-title / penalty chunks that may be in separate windows
     4. The merged candidate list is passed to the Flashrank reranker
-
-    For RAG_SOURCE="old":
-    1. SQL-based search: Filters FIRST, then searches within filtered set (preferred)
-    2. Fallback search: Searches globally, then filters (less reliable)
     """
 
     def __init__(self, document_ids, k=8, logger=None, vectorstore=None):

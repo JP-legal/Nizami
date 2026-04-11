@@ -820,19 +820,17 @@ def answer_legal_question(state: State):
     # ------------------------------------------------------------------
     from src.settings import RAG_SOURCE
     if RAG_SOURCE == 'new':
-        ids_all = find_rag_source_document_ids_by_description(query)
+    ids_all = find_rag_source_document_ids_by_description(query)
 
-        # Prefer non-MOJ docs. Only use MOJ if filtering leaves us with zero docs.
-        moj_prefix = "processed/MOJ/"
-        ids_non_moj = list(
-            RagSourceDocument.objects
-            .filter(id__in=ids_all)
-            .exclude(s3_key__istartswith=moj_prefix)
-            .values_list("id", flat=True)
-        )
-        ids = ids_non_moj if ids_non_moj else ids_all
-    else:
-        ids = find_ref_document_ids_by_description(query)
+    # Prefer non-MOJ docs. Only use MOJ if filtering leaves us with zero docs.
+    moj_prefix = "processed/MOJ/"
+    ids_non_moj = list(
+        RagSourceDocument.objects
+        .filter(id__in=ids_all)
+        .exclude(s3_key__istartswith=moj_prefix)
+        .values_list("id", flat=True)
+    )
+    ids = ids_non_moj if ids_non_moj else ids_all
 
     llm = create_legal_advice_llm()
     template = get_prompt_value_by_name(PromptType.LEGAL_ADVICE)
@@ -844,20 +842,12 @@ def answer_legal_question(state: State):
     RERANK_TOP_N = 8
     retriever = FilteredRetriever(ids, k=RETRIEVE_K, logger=logger)
 
-    if RAG_SOURCE == 'new':
-        search_kwargs = {
-            'k': RETRIEVE_K,
-            'rerank_top_n': RERANK_TOP_N,
-            'source': 'RagSourceDocumentChunk',
-            'filter': {'rag_source_document_id': {'$in': ids}},
-        }
-    else:
-        search_kwargs = {
-            'k': RETRIEVE_K,
-            'rerank_top_n': RERANK_TOP_N,
-            'source': 'langchain_pg_embedding',
-            'filter': {'reference_document_id': {'$in': ids}},
-        }
+    search_kwargs = {
+        'k': RETRIEVE_K,
+        'rerank_top_n': RERANK_TOP_N,
+        'source': 'RagSourceDocumentChunk',
+        'filter': {'rag_source_document_id': {'$in': ids}},
+    }
 
     # ------------------------------------------------------------------
     # 2. Build conversation history messages (fast — no I/O)
