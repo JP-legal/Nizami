@@ -139,6 +139,28 @@ class ExportChatView(APIView):
             logger.exception("PDF generation failed")
             return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # ── Build chat_json — enrich with citation metadata from DB when available ──
+        # When chat_id is provided we pull metadata_json from the persisted Message rows
+        # so that references remain clickable on the public share page.
+        if chat_obj is not None:
+            from src.chats.models import Message as _Message
+            db_messages = list(
+                _Message.objects.filter(chat=chat_obj)
+                .order_by('created_at')
+                .values('role', 'text', 'created_at', 'metadata_json')
+            )
+            chat_json_to_store: list[dict] = [
+                {
+                    'role': m['role'],
+                    'content': m['text'],
+                    'timestamp': m['created_at'].isoformat(),
+                    **(({'metadata_json': m['metadata_json']} if m['metadata_json'] else {})),
+                }
+                for m in db_messages
+            ]
+        else:
+            chat_json_to_store = chat
+
         # ── Upload to S3 ──
         export_id = uuid.uuid4()
         try:
@@ -152,7 +174,7 @@ class ExportChatView(APIView):
             id=export_id,
             chat=chat_obj,
             owner=request.user,
-            chat_json=chat,
+            chat_json=chat_json_to_store,
             summary_json=summary,
             pdf_s3_key=s3_key,
             pdf_url=pdf_url,

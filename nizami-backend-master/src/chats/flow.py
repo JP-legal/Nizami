@@ -818,8 +818,6 @@ def answer_legal_question(state: State):
     # ------------------------------------------------------------------
     # 1. Identify relevant document IDs (unchanged from original logic)
     # ------------------------------------------------------------------
-    from src.settings import RAG_SOURCE
-    if RAG_SOURCE == 'new':
     ids_all = find_rag_source_document_ids_by_description(query)
 
     # Prefer non-MOJ docs. Only use MOJ if filtering leaves us with zero docs.
