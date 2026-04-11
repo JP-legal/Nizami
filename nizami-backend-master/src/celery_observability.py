@@ -22,7 +22,7 @@ from celery.signals import (
     worker_ready,
     worker_shutdown,
 )
-import logger_util
+from src import logger_util
 
 logger = logger_util.get_logger(__name__)
 

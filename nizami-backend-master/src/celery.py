@@ -6,7 +6,7 @@ import os
 import traceback
 import uuid
 
-import logger_util
+from src import logger_util
 
 
 logger = logger_util.get_logger(__name__)
