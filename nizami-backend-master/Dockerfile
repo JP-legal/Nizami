@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 --retries 10 -r requirements.txt
 
 # Pre-download the Flashrank reranker model at build time so workers never
 # download it at runtime (avoids the ~5s network hit and the race condition
