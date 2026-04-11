@@ -841,7 +841,7 @@ def answer_legal_question(state: State):
     # 25 (up from 15) gives the reranker a larger pool, improving recall for
     # specific legal articles that may score lower on pure vector similarity.
     RETRIEVE_K = 25
-    RERANK_TOP_N = 6
+    RERANK_TOP_N = 8
     retriever = FilteredRetriever(ids, k=RETRIEVE_K, logger=logger)
 
     if RAG_SOURCE == 'new':
