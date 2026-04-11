@@ -32,7 +32,7 @@ elif settings.TESTING:
 
 # Initialize Celery observability (OTEL tracing + structured logging)
 # Signal handlers are auto-registered on import, OTEL setup is explicit
-from celery_observability import init_observability
+from src.celery_observability import init_observability
 init_observability()
 
 

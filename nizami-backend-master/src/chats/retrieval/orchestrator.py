@@ -204,6 +204,7 @@ class RetrievalOrchestrator:
         docs_original = retriever.invoke(query)
         docs_translated = retriever.invoke(translated_query)
         docs = self._dedupe_by_chunk_id(docs_original + docs_translated)
+        docs = docs[:30]
 
         logger.info("RAG after dedup: %d candidate chunks", len(docs))
 
